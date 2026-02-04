@@ -1,0 +1,21 @@
+# AlphaFold intermediates (large)
+*.pkl
+msas/
+features.pkl
+
+# Boltz intermediates
+processed/
+
+# Rosetta logs (optional, can be large)
+*.log
+
+# OS files
+.DS_Store
+._*
+*~
+\#*\#
+.\#*
+
+# Python
+__pycache__/
+*.pyc
