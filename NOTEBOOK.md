@@ -152,6 +152,44 @@ Conversion rules: standard 20 amino acids + MSE->M, HSD/HSE/HSP->H, non-standard
 - Boltz job (8824492): all 271 still pending
 - Disk usage: 665 MB (cleaned PDBs are small; AF outputs pending)
 
+### Target List Correction: 271 -> 257
+
+Cross-referenced our 271-entry archive against the official BM5.5 list at
+https://zlab.wenglab.org/benchmark/ (162 rigid-body + 60 medium + 35 difficult = 257).
+
+**14 entries removed** - present in the benchmark5.5.tgz archive but NOT part of BM5.5:
+
+| Removed ID | Reason |
+|-----------|--------|
+| 1BGX | Not in BM5.5 (older benchmark version) |
+| 1BJ1 | Not in BM5.5 (older benchmark version) |
+| 1BVK | Not in BM5.5 (older benchmark version) |
+| 1FSK | Not in BM5.5 (older benchmark version) |
+| 1I9R | Not in BM5.5 (older benchmark version) |
+| 1IQD | Not in BM5.5 (older benchmark version) |
+| 1K4C | Not in BM5.5 (older benchmark version) |
+| 1KXQ | Not in BM5.5 (older benchmark version) |
+| 1NCA | Not in BM5.5 (older benchmark version) |
+| 1NSN | Not in BM5.5 (older benchmark version) |
+| 1QFW | Not in BM5.5 (older benchmark version) |
+| 2HMI | Not in BM5.5 (older benchmark version) |
+| 2JEL | Not in BM5.5 (older benchmark version) |
+| 9QFW | Not in BM5.5 (older benchmark version) |
+
+Deleted from: `data/`, `fasta/`, `cleaned/`, `merged/`, and GitHub `data/` directories.
+Regenerated `af_dirlist.txt` and `bm55_pdb_list.txt` with 257 entries.
+
+**4 non-standard IDs confirmed as part of BM5.5**: BAAD, BOYV, BP57, CP57.
+These use benchmark-specific identifiers rather than standard PDB codes.
+
+Final count: **253 standard PDB IDs + 4 non-standard IDs = 257 BM5.5 complexes**.
+
+### Resubmission #3 (Jobs 8827452 / 8827453)
+
+- AF job 8827452: array 1-257, 10 concurrent, 64 GB, `--nouse_gpu_relax`
+  - 5 targets already complete (auto-skipped): 1A2K, 1ACB, 1AK4, 1AVX, 1AY7
+- Boltz job 8827453: array 1-257, 10 concurrent
+
 ---
 
 ## Pending Steps
