@@ -12,7 +12,7 @@
 #SBATCH --error=logs/af_%A_%a.err
 
 # AlphaFold 2.3.2 Array Job for Protein_Ideal pipeline
-# Submit with: sbatch --array=1-265%10 af_array.slurm
+# Submit with: sbatch --array=1-271%10 af_array.slurm
 
 set -euo pipefail
 

@@ -11,7 +11,7 @@
 #SBATCH --error=logs/boltz_%A_%a.err
 
 # Boltz-1 Array Job for Protein_Ideal pipeline
-# Submit with: sbatch --array=1-265%10 boltz_array.slurm
+# Submit with: sbatch --array=1-271%10 boltz_array.slurm
 
 set -euo pipefail
 
