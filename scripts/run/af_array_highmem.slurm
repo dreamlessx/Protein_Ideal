@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=6
 #SBATCH --gres=gpu:nvidia_rtx_a6000:1
-#SBATCH --mem=64G
+#SBATCH --mem=128G
 #SBATCH --time=48:00:00
 #SBATCH --job-name=af_pi
 #SBATCH --output=logs/af_%A_%a.out
