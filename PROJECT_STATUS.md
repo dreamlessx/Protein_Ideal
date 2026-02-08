@@ -29,7 +29,7 @@ with Rosetta relaxation across 6 protocols.
 - **Targets prepared**: 271
 - **AlphaFold SLURM**: Job 8824491 (array 1-271, 10 concurrent)
 - **Boltz-1 SLURM**: Job 8824492 (array 1-271, 10 concurrent)
-- **Clean PDBs SLURM**: Job 8824321
+- **Clean PDBs SLURM**: Job 8824833 (array 1-271, 50 concurrent)
 
 ## FASTA Acquisition Notes
 
@@ -111,7 +111,7 @@ during the bulk download (files already existed).
 | Step | Status | SLURM Job | Notes |
 |------|--------|-----------|-------|
 | 0. Download BM5.5 | Done | - | 271 complexes from benchmark5.5.tgz |
-| 1. Clean PDBs | Running | 8824321 | Rosetta clean_pdb.py on 271 merged PDBs |
+| 1. Clean PDBs | Running | 8824833 | Rosetta clean_pdb.py, array 1-271, 50 concurrent |
 | 2. Download FASTAs | Done | - | 262 RCSB + 2 obsolete replacements + 4 PDB-extracted + 3 pre-existing |
 | 3. Organize FASTAs | Done | - | 271 data/{ID}/sequence.fasta |
 | 4. Prepare Boltz input | Done | - | 271 data/{ID}/boltz_input.fasta |
