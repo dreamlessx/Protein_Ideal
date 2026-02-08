@@ -5,7 +5,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks=6
 #SBATCH --gres=gpu:nvidia_rtx_a6000:1
-#SBATCH --mem=40G
+#SBATCH --mem=64G
 #SBATCH --time=48:00:00
 #SBATCH --job-name=af_pi
 #SBATCH --output=logs/af_%A_%a.out
@@ -68,7 +68,6 @@ if (( SEQCOUNT > 1 )); then
         --data_dir=$AF2_DATADIR \
         --output_dir=$CALCDIR/af_out \
         --model_preset=multimer \
-        --use_gpu_relax \
         --uniref90_database_path=$AF2_DATADIR/uniref90/uniref90.fasta \
         --mgnify_database_path=$AF2_DATADIR/mgnify/mgy_clusters_2022_05.fa \
         --uniref30_database_path=$AF2_DATADIR/uniref30/UniRef30_2021_03 \
@@ -85,7 +84,6 @@ else
         --max_template_date=9999-12-31 \
         --data_dir=$AF2_DATADIR \
         --output_dir=$CALCDIR/af_out \
-        --use_gpu_relax \
         --uniref90_database_path=$AF2_DATADIR/uniref90/uniref90.fasta \
         --mgnify_database_path=$AF2_DATADIR/mgnify/mgy_clusters_2022_05.fa \
         --uniref30_database_path=$AF2_DATADIR/uniref30/UniRef30_2021_03 \

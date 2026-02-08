@@ -108,6 +108,44 @@ Conversion rules: standard 20 amino acids + MSE->M, HSD/HSE/HSP->H, non-standard
 
 ---
 
+## 2025-02-08: AlphaFold Failure Analysis and Resubmission
+
+### AF Job 8824491 Results (partial run)
+
+- **5 targets completed successfully**: 1A2K, 1ACB, 1AK4, 1AVX, 1AY7
+  - Each produced 5 ranked PDBs + ranking_debug.json (~2 MB per target after cleanup)
+- **2 targets failed**:
+  - **Task 3 (1AHW)**: OOM at 40 GB (3-chain complex, 633 residues). MaxRSS: ~40 GB.
+  - **Task 6 (1ATN)**: AMBER relaxation crash - `ValueError: Amber minimization can only be
+    performed on proteins with well-defined residues. This protein contains at least one
+    residue with no atoms.` Completed all 5 models but crashed during GPU relaxation.
+- **10 tasks cancelled mid-run** (were in MSA/prediction phase when job cancelled):
+  Tasks 5, 9-17. Partial outputs cleaned.
+
+### Script Fixes Applied
+
+1. **Memory**: Increased from 40 GB to 64 GB (`#SBATCH --mem=64G`)
+   - 1AHW OOMed at exactly 40 GB. Larger multimer complexes need more RAM.
+2. **Removed `--use_gpu_relax`** from both monomer and multimer AF runs.
+   - Rationale: AMBER relaxation is not needed since we apply our own Rosetta relaxation
+     (6 protocols x 5 replicates). Removing it also avoids the AMBER crash on complexes
+     with empty residues (1ATN failure).
+   - The ranked PDB output will now be unrelaxed AF predictions.
+   - Note: The 5 already-completed targets (1A2K, 1ACB, 1AK4, 1AVX, 1AY7) used AMBER
+     relaxation. This is a minor inconsistency but acceptable since Rosetta relaxation
+     is applied uniformly afterward.
+
+### Resubmission
+
+- New SLURM job: **8825835** (array 1-271, 10 concurrent)
+- Previously completed targets will be auto-skipped (checks for ranking_debug.json)
+- Failed/cancelled targets had partial outputs cleaned before resubmission
+- Clean PDB job (8824833): 140/271 completed, 181-271 still pending
+- Boltz job (8824492): all 271 still pending
+- Disk usage: 6.7 GB
+
+---
+
 ## Pending Steps
 
 - **Step 7**: Organize AF + Boltz predictions (depends on Steps 5+6 completing)
