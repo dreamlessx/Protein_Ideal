@@ -68,6 +68,7 @@ if (( SEQCOUNT > 1 )); then
         --data_dir=$AF2_DATADIR \
         --output_dir=$CALCDIR/af_out \
         --model_preset=multimer \
+        --nouse_gpu_relax \
         --uniref90_database_path=$AF2_DATADIR/uniref90/uniref90.fasta \
         --mgnify_database_path=$AF2_DATADIR/mgnify/mgy_clusters_2022_05.fa \
         --uniref30_database_path=$AF2_DATADIR/uniref30/UniRef30_2021_03 \
@@ -84,6 +85,7 @@ else
         --max_template_date=9999-12-31 \
         --data_dir=$AF2_DATADIR \
         --output_dir=$CALCDIR/af_out \
+        --nouse_gpu_relax \
         --uniref90_database_path=$AF2_DATADIR/uniref90/uniref90.fasta \
         --mgnify_database_path=$AF2_DATADIR/mgnify/mgy_clusters_2022_05.fa \
         --uniref30_database_path=$AF2_DATADIR/uniref30/UniRef30_2021_03 \

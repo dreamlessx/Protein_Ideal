@@ -135,14 +135,22 @@ Conversion rules: standard 20 amino acids + MSE->M, HSD/HSE/HSP->H, non-standard
      relaxation. This is a minor inconsistency but acceptable since Rosetta relaxation
      is applied uniformly afterward.
 
-### Resubmission
+### Resubmission #1 (Job 8825835) - FAILED
 
-- New SLURM job: **8825835** (array 1-271, 10 concurrent)
-- Previously completed targets will be auto-skipped (checks for ranking_debug.json)
-- Failed/cancelled targets had partial outputs cleaned before resubmission
-- Clean PDB job (8824833): 140/271 completed, 181-271 still pending
+- Submitted with `--use_gpu_relax` removed entirely from command
+- **Result**: 266/271 tasks failed immediately with:
+  `FATAL Flags parsing error: flag --use_gpu_relax=None: Flag --use_gpu_relax must have a value other than None.`
+- AF2's absl flags require `--use_gpu_relax` to be explicitly set (boolean flag).
+  Cannot omit it; must use `--nouse_gpu_relax` to disable.
+- 5 tasks completed (auto-skipped, already had output from job 8824491)
+
+### Resubmission #2 (Job 8827162)
+
+- Fixed flag: replaced removal with `--nouse_gpu_relax` in both monomer and multimer blocks
+- Memory remains at 64 GB
+- Clean PDB job (8824833): **271/271 completed**
 - Boltz job (8824492): all 271 still pending
-- Disk usage: 6.7 GB
+- Disk usage: 665 MB (cleaned PDBs are small; AF outputs pending)
 
 ---
 
