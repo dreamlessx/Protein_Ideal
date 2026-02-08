@@ -58,7 +58,7 @@ SEQCOUNT=$(grep -c '^>' "$FASTA" || true)
 echo "Sequences: $SEQCOUNT"
 
 source $AF2_MINICONDA/bin/activate af232
-export LD_LIBRARY_PATH=$AF2_MINICONDA/envs/af232/lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$AF2_MINICONDA/envs/af232/lib:${LD_LIBRARY_PATH:-}
 
 if (( SEQCOUNT > 1 )); then
     echo "Running as MULTIMER"
