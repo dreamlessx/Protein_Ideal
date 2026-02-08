@@ -8,6 +8,7 @@ obsolete entries by looking up replacement IDs.
 Usage:
     python3 download_fastas.py <merged_dir> [fasta_out_dir] [--overwrite]
 """
+from __future__ import annotations
 import sys, re, time, csv
 from pathlib import Path
 import requests
