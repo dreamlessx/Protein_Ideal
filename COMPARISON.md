@@ -40,7 +40,7 @@ has 257. The 32-target discrepancy has not been investigated.
 |------|----------------------|---------------|
 | `--use_gpu_relax` / `--nouse_gpu_relax` | `--use_gpu_relax` (GPU) | `--nouse_gpu_relax` (CPU) |
 | `--run_relax` | `--run_relax` (explicit) | not set (defaults to True) |
-| `--models_to_relax` | not set (defaults to `best`) | `--models_to_relax=all` |
+| `--models_to_relax` | `all` (updated from default `best`) | `--models_to_relax=all` |
 | `--db_preset` | `--db_preset=full_dbs` (explicit) | not set (databases specified individually) |
 | `--max_template_date` | `9999-12-31` | `9999-12-31` |
 | `--model_preset` | Both `monomer` and `multimer` per target | Auto-detected from sequence count |
@@ -61,7 +61,7 @@ has 257. The 32-target discrepancy has not been investigated.
 | Preset execution | Runs **both** monomer AND multimer for every target | Auto-detects: >1 sequence = multimer, else monomer |
 | Output structure | `af_out/monomer/` and `af_out/multimer/` (separate dirs) | `af_out/sequence/` (single dir) |
 | Total ranked models | 10 per target (5 mono + 5 multi) | 5 per target |
-| Relaxed models | 1 per preset (best only, GPU relax) | All 5 (CPU relax) |
+| Relaxed models | All 5 per preset (GPU relax) | All 5 (CPU relax) |
 | Completion check | Counts `ranked_*.pdb >= 5` per preset dir | Checks for `ranking_debug.json` glob |
 | FASTA discovery | Globs `*.fa,*.fasta,*.faa,*.fas,*.fna` in `sequence/` | Checks `sequence.fasta` then `boltz_input.fasta` |
 | Target discovery | `find` + `sort` on `afset/` subdirectories | Line-numbered `af_dirlist.txt` |
@@ -75,10 +75,9 @@ has 257. The 32-target discrepancy has not been investigated.
    sets of predictions (10 ranked PDBs total). Protein_Ideal auto-detects based on chain
    count and runs only the appropriate preset (5 ranked PDBs).
 
-2. **AMBER Relaxation**: Both pipelines run AMBER relaxation. Pipeline uses GPU
-   (`--use_gpu_relax`) on the best model only (default `--models_to_relax=best`).
-   Protein_Ideal uses CPU (`--nouse_gpu_relax`) on all 5 models (`--models_to_relax=all`).
-   Both produce AMBER-relaxed ranked PDBs.
+2. **AMBER Relaxation**: Both pipelines run AMBER relaxation on all 5 models.
+   Pipeline uses GPU (`--use_gpu_relax`). Protein_Ideal uses CPU (`--nouse_gpu_relax`).
+   Both produce AMBER-relaxed ranked PDBs for all 5 models.
 
 3. **Memory strategy**: Pipeline requests only 6 GB system RAM and relies on
    `TF_FORCE_UNIFIED_MEMORY=1` + `XLA_PYTHON_CLIENT_MEM_FRACTION=4.0` for GPU memory
@@ -243,9 +242,9 @@ The most significant methodological differences that could affect results:
    Protein_Ideal produces 5 (auto-detected preset only). Pipeline provides both binding
    conformations for comparison; Protein_Ideal uses only the structurally appropriate preset.
 
-2. **AMBER relaxation scope**: Pipeline AMBER-relaxes only the best-ranked model per preset
-   (GPU). Protein_Ideal AMBER-relaxes all 5 models (CPU). This means all 5 ranked PDBs from
-   Protein_Ideal are relaxed, while only ranked_0 from each Pipeline preset is relaxed.
+2. **AMBER relaxation compute**: Both pipelines AMBER-relax all 5 models. Pipeline uses
+   GPU relax; Protein_Ideal uses CPU relax. GPU relax is faster but may behave differently
+   on structures with missing atoms or non-standard residues.
 
 3. **Memory strategy**: Pipeline relies on TensorFlow unified memory overcommit (6 GB system +
    GPU overcommit). Protein_Ideal allocates 64-128 GB system RAM. The Pipeline approach can
