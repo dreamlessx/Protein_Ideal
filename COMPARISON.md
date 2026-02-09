@@ -75,9 +75,10 @@ has 257. The 32-target discrepancy has not been investigated.
    sets of predictions (10 ranked PDBs total). Protein_Ideal auto-detects based on chain
    count and runs only the appropriate preset (5 ranked PDBs).
 
-2. **AMBER Relaxation**: Both pipelines run AMBER relaxation on all 5 models.
+2. **AMBER Relaxation**: Both pipelines run AMBER relaxation (OpenMM) on all 5 models.
    Pipeline uses GPU (`--use_gpu_relax`). Protein_Ideal uses CPU (`--nouse_gpu_relax`).
-   Both produce AMBER-relaxed ranked PDBs for all 5 models.
+   Both produce AMBER-relaxed ranked PDBs. The OpenMM relaxation step runs after
+   prediction is complete, so relaxing all 5 models adds minimal overhead.
 
 3. **Memory strategy**: Pipeline requests only 6 GB system RAM and relies on
    `TF_FORCE_UNIFIED_MEMORY=1` + `XLA_PYTHON_CLIENT_MEM_FRACTION=4.0` for GPU memory
