@@ -12,9 +12,9 @@ with Rosetta relaxation across 6 protocols.
 
 ## Dataset: PP Docking Benchmark 5.5
 
-- **Total complexes in BM5.5**: 271
-- **FASTA sequences obtained**: 271/271 (see [FASTA Acquisition Notes](#fasta-acquisition-notes))
-- **Boltz input prepared**: 271/271
+- **Total complexes in BM5.5**: 257
+- **FASTA sequences obtained**: 257/257 (see [FASTA Acquisition Notes](#fasta-acquisition-notes))
+- **Boltz input prepared**: 257/257
 
 ### Previous Runs (Original Pipeline)
 
@@ -26,10 +26,11 @@ with Rosetta relaxation across 6 protocols.
 ### Full BM5.5 Run (Current - protein_ideal_test/)
 
 - **Working directory**: `protein_ideal_test/benchmarking/`
-- **Targets prepared**: 271
-- **AlphaFold SLURM**: Job 8824491 (array 1-271, 10 concurrent)
-- **Boltz-1 SLURM**: Job 8824492 (array 1-271, 10 concurrent)
-- **Clean PDBs SLURM**: Job 8824833 (array 1-271, 50 concurrent)
+- **Targets prepared**: 257
+- **Clean PDBs**: Done (257/257)
+- **AlphaFold SLURM**: Jobs 8834215 (tasks 1-91), 8834163 (tasks 92-257), 8834020 (9 OOM rescue at 128GB)
+- **Boltz-1 SLURM**: Job 8827453 (array 1-257, 10 concurrent, pending)
+- **AF config**: `--nouse_gpu_relax --models_to_relax=all` (AMBER relax all 5 models on CPU)
 
 ## FASTA Acquisition Notes
 
@@ -106,17 +107,17 @@ during the bulk download (files already existed).
 1HCF  1JPS  1K74  1VFB  2I25
 ```
 
-### Full BM5.5 Prediction (271 targets) - IN PROGRESS
+### Full BM5.5 Prediction (257 targets) - IN PROGRESS
 
-| Step | Status | SLURM Job | Notes |
-|------|--------|-----------|-------|
-| 0. Download BM5.5 | Done | - | 271 complexes from benchmark5.5.tgz |
-| 1. Clean PDBs | Running | 8824833 | Rosetta clean_pdb.py, array 1-271, 50 concurrent |
-| 2. Download FASTAs | Done | - | 262 RCSB + 2 obsolete replacements + 4 PDB-extracted + 3 pre-existing |
-| 3. Organize FASTAs | Done | - | 271 data/{ID}/sequence.fasta |
-| 4. Prepare Boltz input | Done | - | 271 data/{ID}/boltz_input.fasta |
-| 5. AlphaFold 2.3.2 | Running | 8824491 | Array 1-271, 10 concurrent, A6000 GPUs |
-| 6. Boltz-1 v0.4.1 | Pending | 8824492 | Array 1-271, 10 concurrent, L40S GPUs |
+| Step | Status | SLURM Job(s) | Notes |
+|------|--------|-------------|-------|
+| 0. Download BM5.5 | Done | - | 257 complexes (14 non-BM5.5 entries removed from archive) |
+| 1. Clean PDBs | Done | 8824833 | 257/257 cleaned with Rosetta clean_pdb.py |
+| 2. Download FASTAs | Done | - | 249 RCSB + 2 obsolete replacements + 4 PDB-extracted + 2 pre-existing |
+| 3. Organize FASTAs | Done | - | 257 data/{ID}/sequence.fasta |
+| 4. Prepare Boltz input | Done | - | 257 data/{ID}/boltz_input.fasta |
+| 5. AlphaFold 2.3.2 | Running | 8834215, 8834163, 8834020 | `--nouse_gpu_relax --models_to_relax=all`, 9 OOM targets at 128GB |
+| 6. Boltz-1 v0.4.1 | Pending | 8827453 | Array 1-257, 10 concurrent, L40S GPUs |
 | 7. Organize predictions | Waiting | - | Depends on 5+6 |
 | 8. Rosetta relaxation | Waiting | - | 6 protocols x 5 replicates |
 | 9. MolProbity validation | Waiting | - | Phenix + reduce |
@@ -159,11 +160,11 @@ during the bulk download (files already existed).
 ├── protein_ideal_test/       # Full BM5.5 pipeline run (current)
 │   ├── Protein_Ideal/        # Cloned repo
 │   └── benchmarking/         # Pipeline working directory
-│       ├── merged/           # 271 merged complex PDBs
+│       ├── merged/           # 257 merged complex PDBs
 │       ├── cleaned/          # Rosetta-cleaned PDBs (in progress)
-│       ├── fasta/            # 271 downloaded FASTAs
-│       ├── data/             # 271 per-PDB directories (sequence.fasta + boltz_input.fasta)
-│       ├── af_dirlist.txt    # 271 target paths for SLURM arrays
+│       ├── fasta/            # 257 downloaded FASTAs
+│       ├── data/             # 257 per-PDB directories (sequence.fasta + boltz_input.fasta)
+│       ├── af_dirlist.txt    # 257 target paths for SLURM arrays
 │       ├── af_array.slurm    # AlphaFold array job
 │       ├── boltz_array.slurm # Boltz-1 array job
 │       └── clean_pdbs.slurm  # PDB cleaning job
@@ -187,7 +188,7 @@ during the bulk download (files already existed).
 ## Validation Pipeline (TODO)
 
 - [ ] MolProbity validation on all 6,820 structures (20-protein subset)
-- [ ] MolProbity validation on full 271-target run
+- [ ] MolProbity validation on full 257-target run
 - [ ] ProteinBusters validation
 - [ ] Statistical analysis and figures
 - [ ] Manuscript preparation

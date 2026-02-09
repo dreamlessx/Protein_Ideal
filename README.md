@@ -34,7 +34,7 @@ This document traces every script, validates each step, and provides verificatio
 | Python | 3.10+ | System or conda |
 | AlphaFold | 2.3.2 | [GitHub](https://github.com/deepmind/alphafold) or cluster module |
 | Boltz-1 | 0.4.1 | `pip install boltz` or cluster module |
-| Rosetta | 3.14+ | [RosettaCommons](https://www.rosettacommons.org/) |
+| Rosetta | 3.15 | [RosettaCommons](https://www.rosettacommons.org/) |
 | Phenix | Latest | [Phenix](https://www.phenix-online.org/) |
 | Reduce | Latest | Included with Phenix or [SBGrid](https://sbgrid.org/) |
 | PyMOL | 2.x+ | [PyMOL](https://pymol.org/) |
@@ -46,15 +46,15 @@ This document traces every script, validates each step, and provides verificatio
 # AlphaFold 2.3.2
 AF2_MINICONDA=/sb/apps/alphafold232/miniconda3
 AF2_REPO=/sb/apps/alphafold232/alphafold
-AF2_DATADIR=/sb/apps/alphafold-data.230
+AF2_DATADIR=/csbtmp/alphafold-data.230
 
 # Boltz-1 v0.4.1
 BOLTZ_MINICONDA=/sb/apps/boltz1-v0.4.1/miniconda3
 
 # Rosetta 3.14
-RELAX=/dors/meilerlab/apps/rosetta/rosetta-3.14/main/source/bin/relax.linuxgccrelease
-ROSETTA_DB=/dors/meilerlab/apps/rosetta/rosetta-3.14/main/database
-CLEAN_SCRIPT=/dors/meilerlab/apps/rosetta/rosetta-3.14/main/tools/protein_tools/scripts/clean_pdb.py
+RELAX=/data/p_csb_meiler/apps/rosetta/rosetta-3.15/main/source/bin/relax.linuxgccrelease
+ROSETTA_DB=/data/p_csb_meiler/apps/rosetta/rosetta-3.15/main/database
+CLEAN_SCRIPT=/data/p_csb_meiler/apps/rosetta/rosetta-3.15/main/tools/protein_tools/scripts/clean_pdb.py
 
 # MolProbity (SBGrid)
 REDUCE=/programs/x86_64-linux/system/sbgrid_bin/reduce
@@ -137,9 +137,9 @@ done
 ### Verification Checkpoint
 
 ```bash
-# Should have ~230-270 PDB files (depends on benchmark version)
+# Should have 257 PDB files (BM5.5 = 162 rigid + 60 medium + 35 difficult)
 ls merged/*.pdb | wc -l
-# Expected: 230-266
+# Expected: 257
 
 # Each PDB should have ATOM records with multiple chains
 grep -c '^ATOM' merged/1AK4.pdb
@@ -247,10 +247,9 @@ python3 scripts/download_fastas.py merged/ fasta/
 **Rate limiting:** 0.15s delay between PDB IDs (polite to servers)
 **Obsolete handling:** If all endpoints fail, checks RCSB entry API for replacement ID
 
-**Known failures from our run:**
-- `3RVW` — no FASTA found (may be obsolete with no replacement)
-- `9QFW` — invalid PDB ID (not in RCSB)
-- 4 files skipped: `BAAD`, `BOYV`, `BP57`, `CP57` — not valid PDB IDs
+**Known special cases from our run:**
+- `1A2K`, `3RVW` — obsolete PDB IDs; FASTAs downloaded from replacement entries (5BXQ, 5VPG)
+- 4 non-standard IDs: `BAAD`, `BOYV`, `BP57`, `CP57` — sequences extracted from ATOM records
 
 ### Verification Checkpoint
 
@@ -397,45 +396,41 @@ done
 
 ## 7. Step 5: Run AlphaFold 2.3.2
 
-### Scripts: `alphafold_array.slurm` / `alphafold_single.slurm`
+### Scripts: `af_array.slurm` / `af_array_highmem.slurm`
 
 **What they do:**
 - Submit SLURM GPU jobs to run AlphaFold 2.3.2
 - Auto-detect monomer vs multimer based on sequence count
-- Produce 5 ranked models per target
-- Skip completed targets (completion guard)
+- Produce 5 ranked models per target, all AMBER-relaxed on CPU
+- Skip completed targets (completion guard checks for `ranking_debug.json`)
+- Clean up intermediates (MSAs, pickles) to stay under 30GB disk quota
 
 ### Run (Array Job)
 
 ```bash
-# Count targets
-N=$(ls -d data/*/ | wc -l)
+# Standard (64GB RAM, covers most targets)
+sbatch --array=1-257%10 scripts/run/af_array.slurm
 
-# Submit array job
-sbatch --array=1-${N}%5 scripts/alphafold_array.slurm
+# High-memory (128GB RAM, for large multimer complexes)
+sbatch --array=<TASK_IDS> scripts/run/af_array_highmem.slurm
 ```
 
-Or for a single target:
-```bash
-sbatch --chdir=data/1AK4 scripts/alphafold_single.slurm
-```
+### Script Audit: `af_array.slurm`
 
-### Script Audit: `alphafold_single.slurm`
-
-**Resources:** 1 node, 6 tasks, 1 A6000 GPU, 100GB RAM, 72h
+**Resources:** 1 node, 6 tasks, 1 A6000 GPU, 64GB RAM, 48h
 **FASTA selection:** Prefers `sequence.fasta` over `boltz_input.fasta`
 **Preset detection:** Counts `>` lines; if >1 → multimer, else monomer
 **Output:** `af_out/sequence/ranked_{0-4}.pdb`
 
 **Key flags:**
-- `--db_preset=full_dbs` — uses BFD + UniRef30 (not reduced)
-- `--use_gpu_relax` — runs AlphaFold's built-in AMBER relax on GPU
+- `--nouse_gpu_relax` — runs AMBER relaxation on CPU (avoids GPU memory issues)
+- `--models_to_relax=all` — AMBER-relaxes all 5 ranked models (not just best)
 - `--max_template_date=9999-12-31` — allows all templates (no date cutoff)
 - Monomer: uses `pdb70` database
 - Multimer: uses `pdb_seqres` + `uniprot`, `num_multimer_predictions_per_model=1`
 
-**Database paths verified (ACCRE):**
-- `uniref90/uniref90.fasta` — exists at `/sb/apps/alphafold-data.230/`
+**Database paths (ACCRE, `/csbtmp/alphafold-data.230/`):**
+- `uniref90/uniref90.fasta`
 - `mgnify/mgy_clusters_2022_05.fa`
 - `uniref30/UniRef30_2021_03`
 - `bfd/bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt`
@@ -443,18 +438,8 @@ sbatch --chdir=data/1AK4 scripts/alphafold_single.slurm
 - `pdb_mmcif/mmcif_files/`
 - `pdb_mmcif/obsolete.dat`
 
-**Potential issues:**
-- 100GB RAM is generous; most complexes need 16-64GB
-- 72h timeout may be insufficient for very large complexes (>1000 residues)
-- The single-run script uses `--ntasks=6` but AlphaFold is primarily GPU-bound; CPUs are for MSA processing
-
-### Script Audit: `alphafold_array.slurm`
-
-**Resources:** 1 node, 8 CPUs, 1 A6000 GPU, 6GB RAM, 48h
-**Target discovery:** Scans `afset/` subdirectories (sorted for deterministic indexing)
-**Completion guard:** Checks if monomer and multimer each have >=5 ranked models
-
-**Issue identified:** 6GB RAM is very low for AlphaFold. The single-run script uses 100GB. This may cause OOM failures on larger complexes. The array script is configured for `afset/` (the 118-target set), which may have been pre-screened for smaller targets.
+**Known OOM targets at 64GB (require 128GB highmem script):**
+1AHW, 1ATN, 1DFJ, 1DQJ, 1E6J, 1FC2, 1IRA, 1JWH, 1MLC (all large multimer complexes)
 
 ### Expected Output
 
@@ -478,16 +463,15 @@ data/{PDBID}/af_out/
 ### Verification Checkpoint
 
 ```bash
-# Check how many targets have 5 ranked models
+# Check how many targets have ranking_debug.json (completion marker)
 completed=0
-for d in data/*/af_out/sequence/; do
-    count=$(ls "$d"/ranked_*.pdb 2>/dev/null | wc -l)
-    if [ "$count" -ge 5 ]; then
+for d in data/*/af_out/*/; do
+    if [ -f "$d/ranking_debug.json" ]; then
         completed=$((completed + 1))
     fi
 done
 echo "AlphaFold complete: $completed"
-# Expected: 144/147 in our run
+# Expected: 257/257 when all jobs finish
 
 # Verify a specific prediction
 ls data/1AK4/af_out/sequence/ranked_*.pdb | wc -l
@@ -895,8 +879,8 @@ head -5 metrics.tsv
 | 2 | `download_fastas.py` | **PASS** | 2-3 PDB IDs may fail (obsolete/invalid) |
 | 3 | `organize_fastas.py` | **PASS** | No issues |
 | 4 | `prepare_boltz_fastas.py` | **PASS with caveat** | Unusual FASTA headers may default to chain A |
-| 5 | `alphafold_array.slurm` | **PASS with caveat** | 6GB RAM too low for large complexes |
-| 5 | `alphafold_single.slurm` | **PASS** | 100GB RAM is safe |
+| 5 | `af_array.slurm` | **PASS** | 64GB RAM; 128GB highmem variant for 9 OOM targets |
+| 5 | `af_array_highmem.slurm` | **PASS** | 128GB RAM for large multimer complexes |
 | 6 | `boltz_array.slurm` | **PASS** | MSA server needs internet from compute node |
 | 6 | `boltz_single.slurm` | **PASS** | Same MSA server caveat |
 | 7 | Organize predictions | Manual | No script — documented above |
