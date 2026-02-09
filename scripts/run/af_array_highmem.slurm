@@ -12,7 +12,7 @@
 #SBATCH --error=logs/af_%A_%a.err
 
 # AlphaFold 2.3.2 Array Job for Protein_Ideal pipeline
-# Submit with: sbatch --array=1-271%10 af_array.slurm
+# Submit with: sbatch --array=<TASK_IDS> af_array_highmem.slurm
 
 set -euo pipefail
 
@@ -69,7 +69,7 @@ if (( SEQCOUNT > 1 )); then
         --output_dir=$CALCDIR/af_out \
         --model_preset=multimer \
         --nouse_gpu_relax \
-        --norun_relax \
+        --models_to_relax=all \
         --uniref90_database_path=$AF2_DATADIR/uniref90/uniref90.fasta \
         --mgnify_database_path=$AF2_DATADIR/mgnify/mgy_clusters_2022_05.fa \
         --uniref30_database_path=$AF2_DATADIR/uniref30/UniRef30_2021_03 \
@@ -87,7 +87,7 @@ else
         --data_dir=$AF2_DATADIR \
         --output_dir=$CALCDIR/af_out \
         --nouse_gpu_relax \
-        --norun_relax \
+        --models_to_relax=all \
         --uniref90_database_path=$AF2_DATADIR/uniref90/uniref90.fasta \
         --mgnify_database_path=$AF2_DATADIR/mgnify/mgy_clusters_2022_05.fa \
         --uniref30_database_path=$AF2_DATADIR/uniref30/UniRef30_2021_03 \

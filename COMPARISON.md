@@ -25,8 +25,8 @@ has 257. The 32-target discrepancy has not been investigated.
 | Memory | 6 GB | 64 GB |
 | CPUs | 8 (`--cpus-per-task=8`) | 6 (`--ntasks=6`) |
 | GPU | A6000 | A6000 |
-| GPU relaxation | `--use_gpu_relax` (enabled) | `--nouse_gpu_relax` (disabled) |
-| Relaxation | `--run_relax` (enabled) | not set |
+| GPU relaxation | `--use_gpu_relax` (GPU) | `--nouse_gpu_relax` (CPU) |
+| Relaxation scope | `--run_relax` (best model) | `--models_to_relax=all` (all models) |
 | DB preset | `--db_preset=full_dbs` (explicit) | not set (full DBs specified individually) |
 | Preset detection | Runs **both** monomer AND multimer for every target | Auto-detects monomer vs multimer from sequence count |
 | Output structure | `af_out/monomer/` and `af_out/multimer/` (separate) | `af_out/sequence/` (single run) |
@@ -45,10 +45,9 @@ has 257. The 32-target discrepancy has not been investigated.
    sets of predictions (10 ranked PDBs total). Protein_Ideal auto-detects based on chain
    count and runs only the appropriate preset (5 ranked PDBs).
 
-2. **GPU Relaxation**: Pipeline uses AMBER GPU relaxation (`--use_gpu_relax --run_relax`).
-   Protein_Ideal disables it (`--nouse_gpu_relax`). This means Pipeline's ranked PDBs
-   are AMBER-relaxed while Protein_Ideal's are unrelaxed. This affects the starting
-   structures for Rosetta relaxation.
+2. **AMBER Relaxation**: Both pipelines run AMBER relaxation. Pipeline uses GPU
+   (`--use_gpu_relax`) on the best model. Protein_Ideal uses CPU (`--nouse_gpu_relax`)
+   on all 5 models (`--models_to_relax=all`). Both produce AMBER-relaxed ranked PDBs.
 
 3. **Memory**: Pipeline requests only 6 GB (relies on `XLA_PYTHON_CLIENT_MEM_FRACTION=4.0`
    for GPU memory overcommit via unified memory). Protein_Ideal requests 64 GB without
@@ -148,8 +147,8 @@ has 257. The 32-target discrepancy has not been investigated.
 
 The most significant methodological differences that could affect results:
 
-1. **AF relaxation state**: Pipeline produces AMBER-relaxed ranked PDBs; Protein_Ideal
-   produces unrelaxed ranked PDBs. Rosetta relaxation starting from different baselines.
+1. **AF relaxation scope**: Pipeline AMBER-relaxes only the best model (GPU); Protein_Ideal
+   AMBER-relaxes all 5 models (CPU). Both produce relaxed ranked PDBs as Rosetta input.
 2. **AF mono+multi vs auto-detect**: Pipeline keeps both monomer and multimer predictions
    (10 models). Protein_Ideal keeps only the appropriate preset (5 models).
 3. **Rosetta version**: 3.14 vs 3.15 may produce slightly different energy landscapes.

@@ -190,6 +190,66 @@ Final count: **253 standard PDB IDs + 4 non-standard IDs = 257 BM5.5 complexes**
   - 5 targets already complete (auto-skipped): 1A2K, 1ACB, 1AK4, 1AVX, 1AY7
 - Boltz job 8827453: array 1-257, 10 concurrent
 
+### AF Job 8827452 Failure Analysis
+
+68/257 completed successfully. **9 tasks failed** (all OOM at 64 GB):
+
+| Task | Target | Chains | Failure | MaxRSS |
+|------|--------|--------|---------|--------|
+| 3 | 1AHW | 3 (633 aa) | OOM | 64 GB |
+| 6 | 1ATN | 2 | OOM | 64 GB |
+| 18 | 1DFJ | 2 | OOM | 64 GB |
+| 19 | 1DQJ | 3 | OOM | 64 GB |
+| 22 | 1E6J | 3 | OOM | 64 GB |
+| 34 | 1FC2 | 2 | OOM | 64 GB |
+| 59 | 1IRA | 2 | OOM | 64 GB |
+| 67 | 1JWH | 2 | OOM | 64 GB |
+| 81 | 1MLC | 3 | OOM | 64 GB |
+
+### Rescue Attempt #1: Jobs 8832606 / 8832608 / 8833852 - FAILED
+
+Added `--norun_relax` flag to skip AMBER relaxation entirely. **All tasks failed immediately**:
+```
+FATAL Flags parsing error: Unknown command line flag 'norun_relax'
+```
+
+`--norun_relax` does not exist in AF 2.3.2. The correct flag to skip relaxation is
+`--models_to_relax=none`. However, the decision was made to **keep AMBER relaxation**
+since it is the AF default behavior.
+
+### Script Updates: AMBER Relaxation on All Models
+
+Per user request, updated AF scripts to relax ALL 5 ranked models (not just the best):
+- Removed invalid `--norun_relax` flag
+- Added `--models_to_relax=all` to both monomer and multimer blocks
+- Kept `--nouse_gpu_relax` (runs AMBER minimization on CPU)
+
+**Inconsistency note**: The main job 8827452 was submitted before `--models_to_relax=all`
+was added. Tasks 1-91 (68 completed + 10 currently running) used the default
+`--models_to_relax=best`, meaning only ranked_0.pdb is AMBER-relaxed while
+ranked_1 through ranked_4 are unrelaxed. Tasks 92-257 (job 8834163) and the 9
+rescue tasks (job 8834020) will have all 5 models AMBER-relaxed.
+
+### Rescue Attempt #2: Job 8834020 (128 GB, --models_to_relax=all)
+
+- Array tasks: 3,6,18,19,22,34,59,67,81
+- Memory: 128 GB
+- Script: `af_array_highmem.slurm`
+- Flags: `--nouse_gpu_relax --models_to_relax=all`
+
+### Resubmission of Tasks 92-257: Job 8834163
+
+- Cancelled pending tasks 92-257 from job 8827452
+- Resubmitted with updated `af_array.slurm` (now includes `--models_to_relax=all`)
+
+### Active AF Jobs
+
+| Job ID | Tasks | Memory | models_to_relax | Status |
+|--------|-------|--------|-----------------|--------|
+| 8827452 | 69-91 (running, finishing) | 64 GB | best (default) | Running |
+| 8834020 | 3,6,18,19,22,34,59,67,81 | 128 GB | all | Running |
+| 8834163 | 92-257 | 64 GB | all | Pending/Running |
+
 ---
 
 ## Pending Steps
