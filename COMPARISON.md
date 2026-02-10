@@ -41,7 +41,7 @@ Both pipelines now target the full BM5.5 benchmark (257 complexes). Pipeline ori
 | `--use_gpu_relax` / `--nouse_gpu_relax` | `--use_gpu_relax` (GPU) | `--nouse_gpu_relax` (CPU) |
 | `--run_relax` | `--run_relax` (explicit) | not set (defaults to True) |
 | `--models_to_relax` | `all` | `all` |
-| `--db_preset` | `reduced_dbs` (README) / `full_dbs` (script default) | not set (databases specified individually) |
+| `--db_preset` | `full_dbs` primary, `reduced_dbs` fallback on HHblits failure | not set (databases specified individually, equivalent to `full_dbs`) |
 | `--max_template_date` | `9999-12-31` | `9999-12-31` |
 | `--model_preset` | Both `monomer` and `multimer` per target | Auto-detected from sequence count |
 | `--num_multimer_predictions_per_model` | `1` (multimer only) | `1` (multimer only) |
@@ -299,5 +299,7 @@ The most significant methodological differences that could affect results:
    directories (`af_out_relaxed/`, `af_out_unrelaxed/`). Protein_Ideal keeps both in
    a single `af_out/sequence/` directory.
 
-6. **Database preset**: Pipeline uses `reduced_dbs` (UniRef30 via MMseqs2, avoids HHblits
-   memory issues). Protein_Ideal specifies databases individually (equivalent to full_dbs).
+6. **Database preset**: Pipeline uses `full_dbs` as primary, falling back to `reduced_dbs`
+   (MMseqs2 + small_bfd) when HHblits fails on specific targets (e.g., antibody sequences
+   exceeding HHblits residue limits). Protein_Ideal uses full databases throughout with no
+   fallback.
