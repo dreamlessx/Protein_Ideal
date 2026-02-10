@@ -41,7 +41,7 @@ Both pipelines now target the full BM5.5 benchmark (257 complexes). Pipeline ori
 | `--use_gpu_relax` / `--nouse_gpu_relax` | `--use_gpu_relax` (GPU) | `--nouse_gpu_relax` (CPU) |
 | `--run_relax` | `--run_relax` (explicit) | not set (defaults to True) |
 | `--models_to_relax` | `all` | `all` |
-| `--db_preset` | `full_dbs` primary, `reduced_dbs` fallback on HHblits failure | not set (databases specified individually, equivalent to `full_dbs`) |
+| `--db_preset` | `full_dbs` primary, `reduced_dbs` fallback on HHblits failure | `full_dbs` primary, `reduced_dbs` fallback on HHblits failure |
 | `--max_template_date` | `9999-12-31` | `9999-12-31` |
 | `--model_preset` | Both `monomer` and `multimer` per target | Auto-detected from sequence count |
 | `--num_multimer_predictions_per_model` | `1` (multimer only) | `1` (multimer only) |
@@ -299,7 +299,7 @@ The most significant methodological differences that could affect results:
    directories (`af_out_relaxed/`, `af_out_unrelaxed/`). Protein_Ideal keeps both in
    a single `af_out/sequence/` directory.
 
-6. **Database preset**: Pipeline uses `full_dbs` as primary, falling back to `reduced_dbs`
-   (MMseqs2 + small_bfd) when HHblits fails on specific targets (e.g., antibody sequences
-   exceeding HHblits residue limits). Protein_Ideal uses full databases throughout with no
-   fallback.
+6. **Database preset**: Both pipelines use `full_dbs` as primary with `reduced_dbs` fallback
+   on HHblits failure. Confirmed HHblits failures on antibody/immunoglobulin targets that hit
+   titin-like sequences in BFD (32763 residue limit). Pipeline: built-in from start.
+   Protein_Ideal: added after 1IRA failure.

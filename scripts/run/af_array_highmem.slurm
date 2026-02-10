@@ -14,12 +14,13 @@
 # AlphaFold 2.3.2 Array Job for Protein_Ideal pipeline
 # Submit with: sbatch --array=<TASK_IDS> af_array_highmem.slurm
 
-set -euo pipefail
+set -uo pipefail
 
 AF2_MINICONDA=/sb/apps/alphafold232/miniconda3
 AF2_DATADIR=/csbtmp/alphafold-data.230
 AF2_REPO=/sb/apps/alphafold232/alphafold
 DIRLIST_FILE="/panfs/accrepfs.vampire/data/p_csb_meiler/agarwm5/protein_ideal_test/benchmarking/af_dirlist.txt"
+SMALL_BFD="$AF2_DATADIR/small_bfd/bfd-first_non_consensus_sequences.fasta"
 
 CALCDIR=$(sed -n "${SLURM_ARRAY_TASK_ID}p" "$DIRLIST_FILE")
 
@@ -60,41 +61,66 @@ echo "Sequences: $SEQCOUNT"
 source $AF2_MINICONDA/bin/activate af232
 export LD_LIBRARY_PATH=$AF2_MINICONDA/envs/af232/lib:${LD_LIBRARY_PATH:-}
 
-if (( SEQCOUNT > 1 )); then
-    echo "Running as MULTIMER"
-    python $AF2_REPO/run_alphafold.py \
-        --fasta_paths=$FASTA \
-        --max_template_date=9999-12-31 \
-        --data_dir=$AF2_DATADIR \
-        --output_dir=$CALCDIR/af_out \
-        --model_preset=multimer \
-        --nouse_gpu_relax \
-        --models_to_relax=all \
-        --uniref90_database_path=$AF2_DATADIR/uniref90/uniref90.fasta \
-        --mgnify_database_path=$AF2_DATADIR/mgnify/mgy_clusters_2022_05.fa \
-        --uniref30_database_path=$AF2_DATADIR/uniref30/UniRef30_2021_03 \
-        --bfd_database_path=$AF2_DATADIR/bfd/bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt \
-        --pdb_seqres_database_path=$AF2_DATADIR/pdb_seqres/pdb_seqres.txt \
-        --uniprot_database_path=$AF2_DATADIR/uniprot/uniprot.fasta \
-        --template_mmcif_dir=$AF2_DATADIR/pdb_mmcif/mmcif_files \
-        --obsolete_pdbs_path=$AF2_DATADIR/pdb_mmcif/obsolete.dat \
-        --num_multimer_predictions_per_model=1
-else
-    echo "Running as MONOMER"
-    python $AF2_REPO/run_alphafold.py \
-        --fasta_paths=$FASTA \
-        --max_template_date=9999-12-31 \
-        --data_dir=$AF2_DATADIR \
-        --output_dir=$CALCDIR/af_out \
-        --nouse_gpu_relax \
-        --models_to_relax=all \
-        --uniref90_database_path=$AF2_DATADIR/uniref90/uniref90.fasta \
-        --mgnify_database_path=$AF2_DATADIR/mgnify/mgy_clusters_2022_05.fa \
-        --uniref30_database_path=$AF2_DATADIR/uniref30/UniRef30_2021_03 \
-        --bfd_database_path=$AF2_DATADIR/bfd/bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt \
-        --pdb70_database_path=$AF2_DATADIR/pdb70/pdb70 \
-        --template_mmcif_dir=$AF2_DATADIR/pdb_mmcif/mmcif_files \
+# Run AF with full_dbs, fallback to reduced_dbs on HHblits failure
+run_af() {
+    local DB_MODE="$1"
+    echo "=== Running AF with $DB_MODE ==="
+
+    local COMMON_ARGS=(
+        --fasta_paths=$FASTA
+        --max_template_date=9999-12-31
+        --data_dir=$AF2_DATADIR
+        --output_dir=$CALCDIR/af_out
+        --nouse_gpu_relax
+        --models_to_relax=all
+        --uniref90_database_path=$AF2_DATADIR/uniref90/uniref90.fasta
+        --mgnify_database_path=$AF2_DATADIR/mgnify/mgy_clusters_2022_05.fa
+        --template_mmcif_dir=$AF2_DATADIR/pdb_mmcif/mmcif_files
         --obsolete_pdbs_path=$AF2_DATADIR/pdb_mmcif/obsolete.dat
+    )
+
+    local DB_ARGS=()
+    if [[ "$DB_MODE" == "full_dbs" ]]; then
+        DB_ARGS=(
+            --uniref30_database_path=$AF2_DATADIR/uniref30/UniRef30_2021_03
+            --bfd_database_path=$AF2_DATADIR/bfd/bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt
+        )
+    else
+        DB_ARGS=(
+            --db_preset=reduced_dbs
+            --small_bfd_database_path=$SMALL_BFD
+        )
+    fi
+
+    if (( SEQCOUNT > 1 )); then
+        echo "Running as MULTIMER"
+        python $AF2_REPO/run_alphafold.py \
+            "${COMMON_ARGS[@]}" \
+            "${DB_ARGS[@]}" \
+            --model_preset=multimer \
+            --pdb_seqres_database_path=$AF2_DATADIR/pdb_seqres/pdb_seqres.txt \
+            --uniprot_database_path=$AF2_DATADIR/uniprot/uniprot.fasta \
+            --num_multimer_predictions_per_model=1
+    else
+        echo "Running as MONOMER"
+        python $AF2_REPO/run_alphafold.py \
+            "${COMMON_ARGS[@]}" \
+            "${DB_ARGS[@]}" \
+            --pdb70_database_path=$AF2_DATADIR/pdb70/pdb70
+    fi
+}
+
+if run_af "full_dbs"; then
+    echo "full_dbs succeeded for $TARGET"
+else
+    echo "full_dbs FAILED for $TARGET, trying reduced_dbs..."
+    rm -rf "$CALCDIR/af_out" 2>/dev/null
+    if run_af "reduced_dbs"; then
+        echo "reduced_dbs succeeded for $TARGET"
+    else
+        echo "ERROR: Both full_dbs and reduced_dbs failed for $TARGET"
+        exit 1
+    fi
 fi
 
 # Cleanup intermediates to manage disk

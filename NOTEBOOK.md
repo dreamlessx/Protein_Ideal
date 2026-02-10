@@ -291,11 +291,11 @@ Both AF jobs from the full reset were cancelled. Resubmitted as:
 
 ### Database Configuration Decision
 
-Using full databases (equivalent to `--db_preset=full_dbs`):
-- HHblits for BFD and UniRef30 searches
-- No `reduced_dbs` fallback (unlike Pipeline which falls back to reduced_dbs on HHblits failure)
-- May encounter HHblits internal limits on antibody/immunoglobulin sequences
-- 64-128 GB memory allocation should handle most HHblits searches
+Using full databases (equivalent to `--db_preset=full_dbs`) with `reduced_dbs` fallback:
+- HHblits for BFD and UniRef30 searches (primary)
+- `reduced_dbs` fallback using small_bfd via jackhmmer (on HHblits failure)
+- 1IRA confirmed HHblits failure on titin fragments in BFD (same issue Pipeline hit on 1AHW, 1ATN)
+- AF script now wraps prediction in retry: full_dbs → clean output → reduced_dbs
 
 ### AF Model Numbering Note
 
@@ -315,11 +315,36 @@ The mapping between ranked and unrelaxed models is in `ranking_debug.json`. For 
   protocol, updated expected output structure
 - Updated PROJECT_STATUS.md: 7 relaxation protocols, current job status, full_dbs config
 
+## 2026-02-10: HHblits Fallback, Boltz OOM Analysis
+
+### HHblits Failure on 1IRA — Fallback Added
+
+- AF highmem job 8851184 task 59 (1IRA) failed after 43 min
+- Error: HHblits titin fragments in BFD exceed 32763 residue limit
+- Same issue Pipeline Claude reported on 1AHW and 1ATN
+- **Fix**: Modified both `af_array.slurm` and `af_array_highmem.slurm`:
+  - Changed `set -euo pipefail` to `set -uo pipefail` (removed `-e`)
+  - Wrapped AF call in `run_af()` function with full_dbs/reduced_dbs modes
+  - On full_dbs failure: clean partial output, retry with `--db_preset=reduced_dbs` + `small_bfd`
+- Resubmitted 1IRA as job **8851737** with updated script
+
+### Boltz OOM — 20 Large Targets
+
+- 20/257 targets exceed L40S GPU memory (48GB VRAM) with 5 diffusion samples
+- All failed targets >1500 residues; all successful targets <1000 residues
+- Largest: 4GXU (5730 residues, 12 chains), 3L89 (3924 residues)
+- Boltz catches OOM silently — exits 0 with "Number of failed examples: 1" and 0 output files
+- **Fix**: Resubmitted job **8851675** with `BOLTZ_SAMPLES=1 FORCE=1` for all 20 targets
+
+Affected targets (task ID: PDB, residues):
+10:1B6C(1796), 17:1DE4(3042), 32:1F6M(1712), 47:1GXD(1650), 56:1IB1(1780),
+69:1K5D(3212), 83:1N2C(3182), 100:1S78(2128), 108:1WDW(3798), 121:1ZM4(3147),
+145:2I9B(1696), 172:3BIW(3268), 178:3EO1(2208), 189:3L89(3924), 210:4FP8(1567),
+215:4GAM(1538), 216:4GXU(5730), 232:5HYS(1990), 248:6BPC(1596), 251:6EY6(3624)
+
 ---
 
 ## Pending Steps
-
-- **Resubmit AF jobs** (8849349/8849371 were cancelled)
 - **Step 7**: Organize AF + Boltz predictions (depends on Steps 5+6 completing)
 - **Step 8**: Submit relaxation (7 protocols x 5 replicates)
   - 1 AMBER/OpenMM protocol (already computed during AF prediction as `ranked_*.pdb`)
