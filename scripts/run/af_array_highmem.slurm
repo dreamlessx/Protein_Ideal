@@ -113,13 +113,20 @@ run_af() {
 if run_af "full_dbs"; then
     echo "full_dbs succeeded for $TARGET"
 else
-    echo "full_dbs FAILED for $TARGET, trying reduced_dbs..."
-    rm -rf "$CALCDIR/af_out" 2>/dev/null
-    if run_af "reduced_dbs"; then
-        echo "reduced_dbs succeeded for $TARGET"
+    echo "full_dbs FAILED for $TARGET"
+    unrelaxed_count=$(find "$CALCDIR/af_out" -name "unrelaxed_model_*.pdb" 2>/dev/null | wc -l)
+    if [[ "$unrelaxed_count" -gt 0 ]]; then
+        echo "WARNING: Found $unrelaxed_count unrelaxed models — AMBER likely failed."
+        echo "Keeping unrelaxed output. Skipping reduced_dbs retry."
     else
-        echo "ERROR: Both full_dbs and reduced_dbs failed for $TARGET"
-        exit 1
+        echo "No unrelaxed models found — MSA/HHblits failure. Trying reduced_dbs..."
+        rm -rf "$CALCDIR/af_out" 2>/dev/null
+        if run_af "reduced_dbs"; then
+            echo "reduced_dbs succeeded for $TARGET"
+        else
+            echo "ERROR: Both full_dbs and reduced_dbs failed for $TARGET"
+            exit 1
+        fi
     fi
 fi
 
