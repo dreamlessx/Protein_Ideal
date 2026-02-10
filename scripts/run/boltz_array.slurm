@@ -44,9 +44,9 @@ BOLTZ_OUT="./boltz_out_dir"
 
 # Check for skip unless FORCE=1
 if [[ "$FORCE" != "1" ]] && [[ -d "$BOLTZ_OUT" ]]; then
-    count=$(find "$BOLTZ_OUT" -name "*.pdb" -type f 2>/dev/null | wc -l)
+    count=$(find "$BOLTZ_OUT" -name "boltz_input_model_*.pdb" -o -name "boltz_input_model_*.cif" -type f 2>/dev/null | wc -l)
     if [[ "$count" -ge 5 ]]; then
-        echo "Output exists ($count PDBs) and FORCE!=1, skipping."
+        echo "Output exists ($count models) and FORCE!=1, skipping."
         exit 0
     fi
 fi
@@ -65,6 +65,7 @@ boltz predict "$FASTA_BASENAME" \
     --recycling_steps "$BOLTZ_RECYCLES" \
     --sampling_steps "$BOLTZ_STEPS" \
     --diffusion_samples "$BOLTZ_SAMPLES" \
+    --output_format pdb \
     --out_dir "$BOLTZ_OUT" \
     --cache "$BOLTZ_CACHE"
 

@@ -277,10 +277,16 @@ Both AF jobs from the full reset were cancelled. Resubmitted as:
 | 8851183 | 248 standard (excluding 9 OOM) | 64 GB | Running |
 | 8851184 | 3,6,18,19,22,34,59,67,81 | 128 GB | Running |
 
-### Boltz-1 Progress
+### Boltz-1 Progress and CIF Bug Fix
 
-- Job 8827453 running (array 1-257, 10 concurrent)
-- ~171 tasks completed so far
+- Job 8827453: 157/257 completed, rest cancelled
+- **Bug found**: Script missing `--output_format pdb` — all 157 targets produced `.cif` (mmCIF)
+  instead of `.pdb`. Rosetta cannot read mmCIF format.
+- **Fix applied**:
+  1. Converted all 785 CIF files to PDB using BioPython (`MMCIFParser` + `PDBIO`) — 0 failures
+  2. Added `--output_format pdb` to `boltz_array.slurm`
+  3. Updated skip guard to check for both `.cif` and `.pdb` files
+- **Resubmitted**: Job **8851422** for 100 remaining targets with corrected script
 - Boltz outputs are unrelaxed (native Boltz predictions, 5 models per target)
 
 ### Database Configuration Decision
