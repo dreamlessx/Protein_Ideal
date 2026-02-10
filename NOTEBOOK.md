@@ -328,19 +328,40 @@ The mapping between ranked and unrelaxed models is in `ranking_debug.json`. For 
   - On full_dbs failure: clean partial output, retry with `--db_preset=reduced_dbs` + `small_bfd`
 - Resubmitted 1IRA as job **8851737** with updated script
 
-### Boltz OOM — 20 Large Targets
+### Boltz OOM — Tiered GPU Strategy
 
-- 20/257 targets exceed L40S GPU memory (48GB VRAM) with 5 diffusion samples
-- All failed targets >1500 residues; all successful targets <1000 residues
-- Largest: 4GXU (5730 residues, 12 chains), 3L89 (3924 residues)
-- Boltz catches OOM silently — exits 0 with "Number of failed examples: 1" and 0 output files
-- **Fix**: Resubmitted job **8851675** with `BOLTZ_SAMPLES=1 FORCE=1` for all 20 targets
+**Problem**: 23/257 targets OOM on L40S (48GB VRAM) with 5 diffusion samples.
 
-Affected targets (task ID: PDB, residues):
-10:1B6C(1796), 17:1DE4(3042), 32:1F6M(1712), 47:1GXD(1650), 56:1IB1(1780),
-69:1K5D(3212), 83:1N2C(3182), 100:1S78(2128), 108:1WDW(3798), 121:1ZM4(3147),
-145:2I9B(1696), 172:3BIW(3268), 178:3EO1(2208), 189:3L89(3924), 210:4FP8(1567),
-215:4GAM(1538), 216:4GXU(5730), 232:5HYS(1990), 248:6BPC(1596), 251:6EY6(3624)
+**Resolution** (3 tiers):
+
+| Tier | GPU | Samples | Targets | Result |
+|------|-----|---------|---------|--------|
+| Standard | L40S 48GB | 5 | 234 targets (<1300 res) | 234/234 ✓ |
+| Highmem | H100 80GB | 5 | 14 targets (1300-2200 res) | 12/14 ✓ |
+| XL | H100 80GB | 1 | 11 targets (>2200 res) | 2/11 ✓ |
+
+**Final Boltz tally: 248/257** (96.5%)
+- 245 targets with 5 models
+- 2 targets (1GXD, 3EO1) with 1 model
+- 1 target (4GXU, 5730 res) may succeed with 1 sample on larger GPU — testing
+
+**9 permanently OOMed targets** (all >3000 residues, AF-only):
+1DE4(3042), 1K5D(3212), 1N2C(3182), 1WDW(3798), 1ZM4(3147),
+3BIW(3268), 3L89(3924), 4GXU(5730), 6EY6(3624)
+
+Created `boltz_array_highmem.slurm` for H100 targets.
+
+### Additional HHblits Failures
+
+- 1DQJ (task 19): HHblits titin failure, resubmitted job 8851780
+- 1MLC (task 81): HHblits titin failure, resubmitted job 8854324
+- 1IRA fallback **succeeded** in 1h53m with reduced_dbs
+
+### AF Progress
+
+First completions arriving: 32/257 standard + 1 fallback (1IRA) as of ~02:30 UTC.
+All completed targets show expected 10 models (5 ranked + 5 unrelaxed).
+Cleanup removes MSAs/pickles automatically. Disk: 37 GB.
 
 ---
 
