@@ -132,7 +132,7 @@ is GPU vs CPU execution, which produces numerically equivalent results.
 | `--diffusion_samples` | 5 | 5 |
 | `--recycling_steps` | 10 | 10 |
 | `--sampling_steps` | 200 | 200 |
-| `--output_format` | `pdb` (explicit) | not set (default) |
+| `--output_format` | `pdb` (explicit) | `pdb` (explicit, added after CIF bug fix) |
 | `--override` | Yes | not set |
 | `--out_dir` | `./boltz_out_dir` | `./boltz_out_dir` |
 | `--cache` | `$HOME/.boltz` | `$HOME/.boltz` |
@@ -152,8 +152,8 @@ is GPU vs CPU execution, which produces numerically equivalent results.
 
 ### Key Differences
 
-1. **Output format**: Pipeline explicitly sets `--output_format pdb`. Protein_Ideal
-   does not, relying on default behavior.
+1. **Output format**: Both pipelines explicitly set `--output_format pdb`. Protein_Ideal
+   added this after initial run produced CIF files instead of PDB (Boltz default is CIF).
 
 2. **Override**: Pipeline uses `--override` to force re-prediction. Protein_Ideal
    relies on the skip check instead.

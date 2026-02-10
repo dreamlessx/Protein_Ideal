@@ -251,6 +251,11 @@ python3 scripts/download_fastas.py merged/ fasta/
 - `1A2K`, `3RVW` — obsolete PDB IDs; FASTAs downloaded from replacement entries (5BXQ, 5VPG)
 - 4 non-standard IDs: `BAAD`, `BOYV`, `BP57`, `CP57` — sequences extracted from ATOM records
 
+**DNA/RNA exclusion policy:** DNA/RNA chains are excluded from all prediction FASTAs.
+BM5.5 is a protein-protein docking benchmark; neither AlphaFold nor Boltz supports
+nucleic acid prediction. Targets with DNA in the crystal structure (3P57, 1H9D) have
+their FASTAs filtered to protein chains only.
+
 ### Verification Checkpoint
 
 ```bash
@@ -430,8 +435,13 @@ sbatch --array=<TASK_IDS> scripts/run/af_array_highmem.slurm
 - Monomer: uses `pdb70` database
 - Multimer: uses `pdb_seqres` + `uniprot`, `num_multimer_predictions_per_model=1`
 
-**Database preset:** Full databases (equivalent to `--db_preset=full_dbs`). Uses HHblits for
-BFD/UniRef30 searches. No reduced_dbs fallback.
+**Database preset:** Full databases (equivalent to `--db_preset=full_dbs`) with `reduced_dbs`
+fallback on HHblits failure. Primary uses HHblits for BFD/UniRef30 searches; fallback uses
+jackhmmer with small_bfd. The `run_af()` function wraps the prediction call and retries
+with `--db_preset=reduced_dbs --small_bfd_database_path=...` if full_dbs fails.
+
+**AMBER safety:** If AMBER relaxation crashes but unrelaxed models exist, the script
+preserves unrelaxed output instead of deleting everything during the reduced_dbs retry.
 
 **Database paths (ACCRE, `/csbtmp/alphafold-data.230/`):**
 - `uniref90/uniref90.fasta`
@@ -531,6 +541,7 @@ sbatch --chdir=data/1AK4 scripts/boltz_single.slurm boltz_input.fasta
 - `output_format=pdb` — outputs PDB files (not mmCIF)
 - `use_msa_server` — uses ColabFold MSA server instead of local databases
 
+**Output format:** `--output_format pdb` (PDB files, not mmCIF)
 **Skip guard:** Checks for existing `boltz_model_*.pdb` files; skips if >= 5 found
 **Force re-run:** Set `FORCE=1` environment variable
 
@@ -557,16 +568,16 @@ data/{PDBID}/boltz_out_dir/
 ### Verification Checkpoint
 
 ```bash
-# Check how many targets have 5 Boltz models
+# Check how many targets have Boltz models
 completed=0
 for d in data/*/boltz_out_dir/; do
-    count=$(find "$d" -name 'boltz_input_model_*.pdb' 2>/dev/null | wc -l)
-    if [ "$count" -ge 5 ]; then
+    count=$(find "$d" -name 'boltz_input_model_*.pdb' -o -name 'boltz_model_*.pdb' 2>/dev/null | wc -l)
+    if [ "$count" -ge 1 ]; then
         completed=$((completed + 1))
     fi
 done
 echo "Boltz complete: $completed"
-# Expected: 133/147 in our run
+# Expected: 248/257 (9 targets OOM on all GPUs, >3000 residues)
 
 # Verify a specific prediction
 find data/1AK4/boltz_out_dir -name '*.pdb' | wc -l

@@ -365,6 +365,85 @@ Cleanup removes MSAs/pickles automatically. Disk: 37 GB.
 
 ---
 
+## 2026-02-10 (cont.): Input Verification, DNA Fix, Cleanup
+
+### Input Verification (God Claude Directive #4/#5)
+
+Comprehensive comparison of Green's FASTA files against the authoritative set
+(dreamlessx's `fasta/` folder in Protein_Relax_Pipeline, 265 files) and Blue's
+active runs (`af_work/`, 257 targets).
+
+**Green vs Authoritative (251 overlapping targets):**
+
+| Category | Count |
+|----------|-------|
+| Byte-identical | 48 |
+| Same sequences, different chain order | 203 |
+| Truly different sequences | **0** |
+
+Green passes with zero sequence mismatches. The 203 chain-order reversals are
+cosmetic (Green uses BM5.5 receptor-first order; Auth uses RCSB chain-ID order).
+
+6 targets in Green but not in Auth: 1A2K, 3RVW, BAAD, BOYV, BP57, CP57
+(non-standard IDs or obsolete replacements without authoritative FASTAs).
+
+14 targets in Auth but not in Green: old BM5.5 entries already excluded from
+our 257-target list (1BGX, 1BJ1, 1BVK, etc.).
+
+**Green vs Blue (257 overlapping targets):**
+
+| Category | Count |
+|----------|-------|
+| Same sequences | 240 |
+| Truly different | 17 |
+
+Of 17 different: 6 are the non-standard targets (no authoritative source to
+arbitrate); 11 are where Blue diverges from both Green AND the authoritative
+set (Blue's FASTA generation had bugs: empty files, missing chains).
+
+### DNA/RNA Chain Removal
+
+Per God Claude's DNA/RNA exclusion policy (protein-only predictions), audited
+all 257 targets for DNA/RNA sequences in FASTAs. Found 2 targets:
+
+| Target | DNA chains removed | Protein chains kept |
+|--------|-------------------|-------------------|
+| 3P57 | 2 DNA strands (15 nt each) | p300 (111 aa) + MEF2A x6 (86 aa) |
+| 1H9D | 2 DNA strands (10 nt each) | CBF-alpha x2 (131 aa) + CBF-beta x2 (133 aa) |
+
+Both `sequence.fasta` and `boltz_input.fasta` updated for each target.
+Neither target had started AF yet (3P57=task 193, 1H9D=task 49), so no
+re-runs needed. The `boltz_input.fasta` files also had a bug where DNA
+chains were mislabeled as `|PROTEIN|` — now fixed.
+
+BP57 and CP57 (derived from 3P57) already had DNA stripped — no changes needed.
+
+### Disk Cleanup
+
+- Deleted `blue_repo_check/` temp clone of Protein_Relax_Pipeline (5.9 GB freed)
+- Deleted temp verification scripts from ClaudeChat/ (fasta_comparison.sh, etc.)
+- Current disk: ~28 GB (below 30 GB soft target)
+
+### AF Progress Update
+
+| Job | Tasks | Status |
+|-----|-------|--------|
+| 8851183 | 248 standard (64GB) | 29/257 complete, ~10 running |
+| 8855266 | 6 highmem (128GB): 1AHW, 1ATN, 1DFJ, 1E6J, 1FC2, 1JWH | Running |
+| 8854324 | 1 task: 1MLC | Complete (reduced_dbs fallback) |
+
+HHblits fallback targets confirmed working: 1IRA, 1DQJ, 1MLC all completed
+with reduced_dbs.
+
+### Boltz Final Status
+
+248/257 (96.5%) — no changes from earlier:
+- 245 targets: 5 models (standard)
+- 2 targets (1GXD, 3EO1): 1 model (H100 1-sample)
+- 9 targets: permanently OOMed (>3000 residues, AF-only)
+
+---
+
 ## Pending Steps
 - **Step 7**: Organize AF + Boltz predictions (depends on Steps 5+6 completing)
 - **Step 8**: Submit relaxation (7 protocols x 5 replicates)
