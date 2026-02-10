@@ -242,19 +242,35 @@ rescue tasks (job 8834020) will have all 5 models AMBER-relaxed.
 - Cancelled pending tasks 92-257 from job 8827452
 - Resubmitted with updated `af_array.slurm` (now includes `--models_to_relax=all`)
 
-### Active AF Jobs
+### Design Change: 10 AF Models Per Target
 
-| Job ID | Tasks | Memory | models_to_relax | Status |
-|--------|-------|--------|-----------------|--------|
-| 8827452 | 69-91 (running, finishing) | 64 GB | best (default) | Running |
-| 8834020 | 3,6,18,19,22,34,59,67,81 | 128 GB | all | Running |
-| 8834163 | 92-257 | 64 GB | all | Pending/Running |
+Previous approach kept only AMBER-relaxed ranked PDBs (5 per target). Updated to keep
+both unrelaxed and relaxed models:
+
+- **5 `ranked_*.pdb`**: AMBER-relaxed via OpenMM (CPU)
+- **5 `unrelaxed_model_*.pdb`**: Raw AF predictions, no relaxation
+
+AMBER relaxation is now treated as one of the relaxation protocols (alongside 6 Rosetta
+protocols), rather than a preprocessing step. The unrelaxed models serve as the baseline
+input for all relaxation comparisons.
+
+**Full AF reset**: Cleaned all 216 existing af_out directories (had deleted unrelaxed
+models). Resubmitted all 257 targets from scratch.
+
+### Active AF Jobs (Reset)
+
+| Job ID | Tasks | Memory | models_to_relax | Keeps unrelaxed | Status |
+|--------|-------|--------|-----------------|-----------------|--------|
+| 8849349 | 248 standard tasks | 64 GB | all | Yes | Submitted |
+| 8849371 | 3,6,18,19,22,34,59,67,81 | 128 GB | all | Yes | Submitted |
 
 ---
 
 ## Pending Steps
 
 - **Step 7**: Organize AF + Boltz predictions (depends on Steps 5+6 completing)
-- **Step 8**: Submit Rosetta relaxation (6 protocols x 5 replicates)
+- **Step 8**: Submit relaxation (7 protocols x 5 replicates)
+  - 6 Rosetta protocols: cart_beta, cart_ref15, dual_beta, dual_ref15, norm_beta, norm_ref15
+  - 1 AMBER/OpenMM protocol (already computed during AF prediction)
 - **Step 9**: MolProbity validation
 - **Step 10**: Collect RMSD + energy metrics

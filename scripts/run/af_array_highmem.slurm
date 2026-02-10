@@ -97,15 +97,15 @@ else
         --obsolete_pdbs_path=$AF2_DATADIR/pdb_mmcif/obsolete.dat
 fi
 
-# Cleanup intermediates to stay under 30GB disk limit
-# Keep only ranked PDBs and ranking_debug.json
+# Cleanup intermediates to manage disk
+# Keep: ranked PDBs (AMBER-relaxed) + unrelaxed PDBs + ranking_debug.json
+# Result: 10 models per target (5 relaxed + 5 unrelaxed)
 echo "Cleaning up intermediates for $TARGET..."
 for subdir in $CALCDIR/af_out/*/; do
     rm -rf "$subdir/msas" 2>/dev/null
     rm -f "$subdir"/features.pkl 2>/dev/null
     rm -f "$subdir"/result_model_*.pkl 2>/dev/null
-    rm -f "$subdir"/unrelaxed_model_*.pdb 2>/dev/null
     rm -f "$subdir"/relaxed_model_*.pdb 2>/dev/null
     rm -f "$subdir"/timings.json 2>/dev/null
 done
-echo "Cleanup done. Kept ranked PDBs and ranking_debug.json only."
+echo "Cleanup done. Kept ranked PDBs (relaxed) + unrelaxed PDBs + ranking_debug.json."
