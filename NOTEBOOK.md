@@ -270,7 +270,12 @@ models). Resubmitted all 257 targets from scratch.
 
 ### AF Jobs 8849349 / 8849371 Status
 
-Both AF jobs from the full reset were cancelled. Need resubmission.
+Both AF jobs from the full reset were cancelled. Resubmitted as:
+
+| Job ID | Tasks | Memory | Status |
+|--------|-------|--------|--------|
+| 8851183 | 248 standard (excluding 9 OOM) | 64 GB | Running |
+| 8851184 | 3,6,18,19,22,34,59,67,81 | 128 GB | Running |
 
 ### Boltz-1 Progress
 
