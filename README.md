@@ -401,9 +401,10 @@ done
 **What they do:**
 - Submit SLURM GPU jobs to run AlphaFold 2.3.2
 - Auto-detect monomer vs multimer based on sequence count
-- Produce 5 ranked models per target, all AMBER-relaxed on CPU
+- Produce 10 models per target: 5 AMBER-relaxed (`ranked_*.pdb`) + 5 unrelaxed (`unrelaxed_model_*.pdb`)
+- AMBER relaxation treated as 7th relaxation protocol (alongside 6 Rosetta protocols)
 - Skip completed targets (completion guard checks for `ranking_debug.json`)
-- Clean up intermediates (MSAs, pickles) to stay under 30GB disk quota
+- Clean up intermediates (MSAs, pickles) to manage disk usage
 
 ### Run (Array Job)
 
@@ -420,7 +421,7 @@ sbatch --array=<TASK_IDS> scripts/run/af_array_highmem.slurm
 **Resources:** 1 node, 6 tasks, 1 A6000 GPU, 64GB RAM, 48h
 **FASTA selection:** Prefers `sequence.fasta` over `boltz_input.fasta`
 **Preset detection:** Counts `>` lines; if >1 → multimer, else monomer
-**Output:** `af_out/sequence/ranked_{0-4}.pdb`
+**Output:** `af_out/sequence/ranked_{0-4}.pdb` (AMBER-relaxed) + `af_out/sequence/unrelaxed_model_*.pdb` (raw predictions)
 
 **Key flags:**
 - `--nouse_gpu_relax` — runs AMBER relaxation on CPU (avoids GPU memory issues)
@@ -428,6 +429,9 @@ sbatch --array=<TASK_IDS> scripts/run/af_array_highmem.slurm
 - `--max_template_date=9999-12-31` — allows all templates (no date cutoff)
 - Monomer: uses `pdb70` database
 - Multimer: uses `pdb_seqres` + `uniprot`, `num_multimer_predictions_per_model=1`
+
+**Database preset:** Full databases (equivalent to `--db_preset=full_dbs`). Uses HHblits for
+BFD/UniRef30 searches. No reduced_dbs fallback.
 
 **Database paths (ACCRE, `/csbtmp/alphafold-data.230/`):**
 - `uniref90/uniref90.fasta`
@@ -443,22 +447,29 @@ sbatch --array=<TASK_IDS> scripts/run/af_array_highmem.slurm
 
 ### Expected Output
 
+After cleanup, 10 models per target are retained:
 ```
 data/{PDBID}/af_out/
 └── sequence/
-    ├── ranked_0.pdb          # Best model
+    ├── ranked_0.pdb              # Best AMBER-relaxed model (0-indexed)
     ├── ranked_1.pdb
     ├── ranked_2.pdb
     ├── ranked_3.pdb
-    ├── ranked_4.pdb          # 5th model
-    ├── ranking_debug.json    # Ranking scores
-    ├── timings.json          # Runtime info
-    ├── features.pkl          # Input features (~large)
-    ├── msas/                 # MSA alignments (~140MB)
-    ├── result_model_*.pkl    # Model results (~50MB each)
-    ├── unrelaxed_model_*.pdb # Pre-relaxation models
-    └── relaxed_model_*.pdb   # AMBER-relaxed models
+    ├── ranked_4.pdb              # 5th AMBER-relaxed model
+    ├── unrelaxed_model_1_*.pdb   # Raw AF prediction (1-indexed, AF convention)
+    ├── unrelaxed_model_2_*.pdb
+    ├── unrelaxed_model_3_*.pdb
+    ├── unrelaxed_model_4_*.pdb
+    ├── unrelaxed_model_5_*.pdb
+    └── ranking_debug.json        # Maps ranked (0-indexed) to model (1-indexed)
 ```
+
+**Numbering note**: AlphaFold uses 0-indexed `ranked_*.pdb` (ordered by confidence) and
+1-indexed `unrelaxed_model_*` (unordered). The `ranking_debug.json` file maps between them.
+For example, `ranked_0.pdb` may correspond to `unrelaxed_model_3` if model 3 scored highest.
+
+Intermediate files removed by cleanup: MSAs, feature pickles, result pickles,
+`relaxed_model_*.pdb` (duplicates of ranked PDBs), timings.
 
 ### Verification Checkpoint
 
@@ -613,7 +624,24 @@ ls test/1AK4/Boltz/
 
 ---
 
-## 10. Step 8: Run Rosetta Relaxation
+## 10. Step 8: Run Relaxation (7 Protocols)
+
+### Overview
+
+7 relaxation protocols total: 1 AMBER (computed during AF prediction) + 6 Rosetta.
+
+### Protocol 1: AMBER Relaxation (AlphaFold Native)
+
+AMBER relaxation via OpenMM is performed during AlphaFold prediction (Step 5):
+- **Force field**: AMBER ff14SB
+- **Energy tolerance**: 2.39 kcal/mol
+- **Position restraint stiffness**: 10.0 kcal/mol/A^2
+- **Compute**: CPU (`--nouse_gpu_relax`)
+- **Output**: `ranked_*.pdb` files (already generated in Step 5)
+
+No separate script needed — AMBER relaxation is built into AlphaFold's `--models_to_relax=all`.
+
+### Protocols 2-7: Rosetta Relaxation
 
 ### Script: `relax_predictions.slurm`
 
@@ -623,7 +651,7 @@ ls test/1AK4/Boltz/
    - Runs 6 relaxation protocols x 5 replicates = 30 relaxed structures
 2. Each replicate uses `-nstruct 1` with a different suffix (`_r1` through `_r5`)
 
-### The 6 Protocols
+### The 6 Rosetta Protocols
 
 | Key | Protocol | Scoring Function | Rosetta Flags |
 |-----|----------|-----------------|---------------|

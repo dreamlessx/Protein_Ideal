@@ -266,11 +266,52 @@ models). Resubmitted all 257 targets from scratch.
 
 ---
 
+## 2025-02-09: AF Jobs Cancelled, Documentation Updates
+
+### AF Jobs 8849349 / 8849371 Status
+
+Both AF jobs from the full reset were cancelled. Need resubmission.
+
+### Boltz-1 Progress
+
+- Job 8827453 running (array 1-257, 10 concurrent)
+- ~171 tasks completed so far
+- Boltz outputs are unrelaxed (native Boltz predictions, 5 models per target)
+
+### Database Configuration Decision
+
+Using full databases (equivalent to `--db_preset=full_dbs`):
+- HHblits for BFD and UniRef30 searches
+- No `reduced_dbs` fallback (unlike Pipeline which falls back to reduced_dbs on HHblits failure)
+- May encounter HHblits internal limits on antibody/immunoglobulin sequences
+- 64-128 GB memory allocation should handle most HHblits searches
+
+### AF Model Numbering Note
+
+AlphaFold uses different numbering conventions for its output files:
+- `ranked_0.pdb` through `ranked_4.pdb` — 0-indexed, ordered by model confidence
+- `unrelaxed_model_1_*.pdb` through `unrelaxed_model_5_*.pdb` — 1-indexed, not ordered by confidence
+
+The mapping between ranked and unrelaxed models is in `ranking_debug.json`. For example,
+`ranked_0.pdb` may correspond to `unrelaxed_model_3_*.pdb` depending on which model scored highest.
+
+### Documentation Updates
+
+- Updated COMPARISON.md: Pipeline now uses full_dbs primary with reduced_dbs fallback;
+  both pipelines save 10 AF models (5 relaxed + 5 unrelaxed); AMBER as 7th protocol;
+  both target 257 BM5.5 complexes
+- Updated README.md: 10 AF models per target, full databases, AMBER as 7th relaxation
+  protocol, updated expected output structure
+- Updated PROJECT_STATUS.md: 7 relaxation protocols, current job status, full_dbs config
+
+---
+
 ## Pending Steps
 
+- **Resubmit AF jobs** (8849349/8849371 were cancelled)
 - **Step 7**: Organize AF + Boltz predictions (depends on Steps 5+6 completing)
 - **Step 8**: Submit relaxation (7 protocols x 5 replicates)
+  - 1 AMBER/OpenMM protocol (already computed during AF prediction as `ranked_*.pdb`)
   - 6 Rosetta protocols: cart_beta, cart_ref15, dual_beta, dual_ref15, norm_beta, norm_ref15
-  - 1 AMBER/OpenMM protocol (already computed during AF prediction)
 - **Step 9**: MolProbity validation
 - **Step 10**: Collect RMSD + energy metrics

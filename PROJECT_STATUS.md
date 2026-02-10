@@ -4,7 +4,7 @@
 
 Protein-Protein Complex Relaxation Benchmark using Docking Benchmark 5.5 (BM5.5).
 Benchmarking AlphaFold 2.3.2 and Boltz-1 predictions against experimental crystal structures,
-with Rosetta relaxation across 6 protocols.
+with relaxation across 7 protocols (1 AMBER/OpenMM + 6 Rosetta).
 
 **Lab**: Meiler Lab, Vanderbilt University
 **Cluster**: ACCRE (csb_gpu_acc)
@@ -28,9 +28,11 @@ with Rosetta relaxation across 6 protocols.
 - **Working directory**: `protein_ideal_test/benchmarking/`
 - **Targets prepared**: 257
 - **Clean PDBs**: Done (257/257)
-- **AlphaFold SLURM**: Jobs 8834215 (tasks 1-91), 8834163 (tasks 92-257), 8834020 (9 OOM rescue at 128GB)
-- **Boltz-1 SLURM**: Job 8827453 (array 1-257, 10 concurrent, pending)
+- **AlphaFold SLURM**: Jobs 8849349 (248 standard, 64GB) + 8849371 (9 OOM at 128GB) — cancelled, needs resubmission
+- **Boltz-1 SLURM**: Job 8827453 (array 1-257, 10 concurrent, in progress)
 - **AF config**: `--nouse_gpu_relax --models_to_relax=all` (AMBER relax all 5 models on CPU)
+- **AF output**: 10 models per target (5 AMBER-relaxed `ranked_*.pdb` + 5 unrelaxed `unrelaxed_model_*.pdb`)
+- **Database preset**: Full databases (HHblits + BFD + UniRef30), no reduced_dbs fallback
 
 ## FASTA Acquisition Notes
 
@@ -116,25 +118,26 @@ during the bulk download (files already existed).
 | 2. Download FASTAs | Done | - | 249 RCSB + 2 obsolete replacements + 4 PDB-extracted + 2 pre-existing |
 | 3. Organize FASTAs | Done | - | 257 data/{ID}/sequence.fasta |
 | 4. Prepare Boltz input | Done | - | 257 data/{ID}/boltz_input.fasta |
-| 5. AlphaFold 2.3.2 | Running | 8834215, 8834163, 8834020 | `--nouse_gpu_relax --models_to_relax=all`, 9 OOM targets at 128GB |
-| 6. Boltz-1 v0.4.1 | Pending | 8827453 | Array 1-257, 10 concurrent, L40S GPUs |
+| 5. AlphaFold 2.3.2 | Needs resubmit | 8849349/8849371 (cancelled) | 10 models/target (5 relaxed + 5 unrelaxed), full_dbs, 9 OOM targets at 128GB |
+| 6. Boltz-1 v0.4.1 | Running | 8827453 | Array 1-257, 10 concurrent, L40S GPUs |
 | 7. Organize predictions | Waiting | - | Depends on 5+6 |
-| 8. Rosetta relaxation | Waiting | - | 6 protocols x 5 replicates |
+| 8. Relaxation | Waiting | - | 7 protocols: 1 AMBER (done in Step 5) + 6 Rosetta x 5 replicates |
 | 9. MolProbity validation | Waiting | - | Phenix + reduce |
 | 10. Collect metrics | Waiting | - | PyMOL RMSD + Rosetta energies |
 
 ## Relaxation Protocols
 
-6 protocols, 5 replicates each:
+7 protocols total (1 AMBER + 6 Rosetta), 5 replicates each for Rosetta:
 
-| Protocol | Rosetta Flags |
-|----------|---------------|
-| cartesian_beta | `-relax:cartesian -beta_nov16 -score:weights beta_nov16_cart` |
-| cartesian_ref15 | `-relax:cartesian -score:weights ref2015_cart` |
-| dualspace_beta | `-relax:dualspace -beta_nov16 -score:weights beta_nov16_cart -nonideal -relax:minimize_bond_angles -relax:minimize_bond_lengths` |
-| dualspace_ref15 | `-relax:dualspace -score:weights ref2015_cart -nonideal -relax:minimize_bond_angles -relax:minimize_bond_lengths` |
-| normal_beta | `-beta_nov16 -score:weights beta_nov16` |
-| normal_ref15 | `-score:weights ref2015` |
+| # | Protocol | Method | Notes |
+|---|----------|--------|-------|
+| 1 | AMBER (native) | AlphaFold OpenMM (ff14SB) | Computed during AF prediction (CPU relax) |
+| 2 | cartesian_beta | Rosetta | `-relax:cartesian -beta_nov16 -score:weights beta_nov16_cart` |
+| 3 | cartesian_ref15 | Rosetta | `-relax:cartesian -score:weights ref2015_cart` |
+| 4 | dualspace_beta | Rosetta | `-relax:dualspace -beta_nov16 -score:weights beta_nov16_cart -nonideal -relax:minimize_bond_angles -relax:minimize_bond_lengths` |
+| 5 | dualspace_ref15 | Rosetta | `-relax:dualspace -score:weights ref2015_cart -nonideal -relax:minimize_bond_angles -relax:minimize_bond_lengths` |
+| 6 | normal_beta | Rosetta | `-beta_nov16 -score:weights beta_nov16` |
+| 7 | normal_ref15 | Rosetta | `-score:weights ref2015` |
 
 ## Key Findings (Preliminary)
 
