@@ -118,7 +118,7 @@ is GPU vs CPU execution, which produces numerically equivalent results.
 |-----------|----------------------|---------------|
 | Memory | 256 GB | 256 GB |
 | CPUs | 1 | 1 |
-| GPU | L40S | L40S |
+| GPU | L40S | L40S (standard), H100 80GB (highmem) |
 | Wall time | 2 days | 2 days |
 | Account | `p_meiler_acc` | `p_meiler_acc` |
 | Mail notifications | `BEGIN,END,FAIL` (no recipient set) | Not set |
@@ -303,3 +303,47 @@ The most significant methodological differences that could affect results:
    on HHblits failure. Confirmed HHblits failures on antibody/immunoglobulin targets that hit
    titin-like sequences in BFD (32763 residue limit). Pipeline: built-in from start.
    Protein_Ideal: added after 1IRA failure.
+
+7. **HHblits fallback mechanism**: Both pipelines wrap the AF call in a retry function.
+   On failure, the script checks for existing `unrelaxed_model_*.pdb` files. If present,
+   AMBER failed but prediction succeeded — unrelaxed models are preserved. If absent,
+   HHblits failed — output is cleaned and AF retries with `--db_preset=reduced_dbs` +
+   `--small_bfd_database_path`. Three targets confirmed: 1IRA, 1DQJ, 1MLC all completed
+   with reduced_dbs fallback. Full_dbs uses HHblits + BFD + UniRef30; reduced_dbs uses
+   jackhmmer + small_bfd.
+
+8. **AMBER crash recovery**: Both pipelines run AMBER on all 5 models
+   (`--models_to_relax=all`). If AMBER crashes (e.g., 1ATN: `ValueError: residue with
+   no atoms`), unrelaxed models survive as baseline for Rosetta relaxation. The script
+   detects partial output (unrelaxed models present, no ranking_debug.json) and preserves
+   them rather than deleting everything during a reduced_dbs retry.
+
+9. **Boltz GPU tiering**: Pipeline uses single L40S tier. Protein_Ideal stratifies by
+   residue count:
+
+   | Tier | GPU | Samples | Residue Range | Targets | Result |
+   |------|-----|---------|---------------|---------|--------|
+   | Standard | L40S 48GB | 5 | <1300 | 234 | 234/234 |
+   | Highmem | H100 80GB | 5 | 1300-2200 | 14 | 12/14 |
+   | XL | H100 80GB | 1 | >2200 | 11 | 2/11 |
+
+   Final: 248/257 (96.5%). 9 targets >3000 residues permanently OOMed (AF-only):
+   1DE4, 1K5D, 1N2C, 1WDW, 1ZM4, 3BIW, 3L89, 4GXU, 6EY6.
+
+10. **DNA/RNA exclusion**: Both pipelines exclude DNA/RNA chains from prediction FASTAs.
+    BM5.5 is a protein-protein benchmark; neither AF nor Boltz supports nucleic acids.
+    Protein_Ideal audited all 257 targets and removed DNA from 3P57 (2 DNA strands) and
+    1H9D (2 DNA strands). BP57/CP57 already protein-only.
+
+11. **Input verification**: Protein_Ideal FASTAs verified against dreamlessx's
+    authoritative set (265 files in Protein_Relax_Pipeline `fasta/`). Of 251 overlapping
+    targets: 48 byte-identical, 203 same sequences with different chain order, 0 truly
+    different. Chain order difference: Protein_Ideal uses BM5.5 receptor-first order;
+    Pipeline uses RCSB chain-ID order. Both are valid; difference is cosmetic.
+
+12. **Chain ordering effect on AF-Multimer**: AF-Multimer processes chains in FASTA
+    order. The reversed chain ordering between pipelines (203/251 targets) may produce
+    slightly different MSA pairing and template matching. For relaxation analysis, this is
+    irrelevant (MolProbity, clashscore, Ramachandran are chain-order-independent). For
+    DockQ comparison, proper alignment handles this. If both pipelines produce consistent
+    relaxation results despite different chain order, this demonstrates robustness.
