@@ -28,14 +28,17 @@ with relaxation across 7 protocols (1 AMBER/OpenMM + 6 Rosetta).
 - **Working directory**: `protein_ideal_test/benchmarking/`
 - **Targets prepared**: 257
 - **Clean PDBs**: Done (257/257)
-- **AlphaFold**: 29/257 complete. Jobs: 8851183 (248 standard, 64GB) + 8855266 (6 highmem, 128GB) + 8854324 (1MLC, complete)
+- **AlphaFold**: 90/257 complete (35%). Jobs: 8851183 (248 standard, 64GB) + 8855266 (6 highmem, complete) + 8854324 (1MLC, complete)
+  - 87 targets: full 10 models (5 ranked + 5 unrelaxed)
+  - 3 targets (1ATN, 1DFJ, 1FC2): AMBER failed, 5 unrelaxed models saved
+  - 10 currently running, 157 pending
 - **Boltz-1**: 248/257 complete (96.5%). 9 targets OOM on all GPUs (>3000 residues, AF-only)
 - **AF config**: `--nouse_gpu_relax --models_to_relax=all` (AMBER relax all 5 models on CPU)
 - **AF output**: 10 models per target (5 AMBER-relaxed `ranked_*.pdb` + 5 unrelaxed `unrelaxed_model_*.pdb`)
 - **Database preset**: Full databases (HHblits + BFD + UniRef30), `reduced_dbs` fallback on HHblits failure
 - **Input verification**: Green's FASTAs verified against authoritative set — 0 sequence mismatches (251/251)
 - **DNA/RNA policy**: DNA/RNA chains excluded from all prediction FASTAs (protein-only). Fixed 3P57 and 1H9D.
-- **Disk usage**: ~28 GB (under 30 GB soft target, 50 GB hard limit)
+- **Disk usage**: ~24 GB (under 30 GB soft target, 50 GB hard limit)
 
 ## FASTA Acquisition Notes
 
@@ -121,7 +124,7 @@ during the bulk download (files already existed).
 | 2. Download FASTAs | Done | - | 249 RCSB + 2 obsolete replacements + 4 PDB-extracted + 2 pre-existing |
 | 3. Organize FASTAs | Done | - | 257 data/{ID}/sequence.fasta |
 | 4. Prepare Boltz input | Done | - | 257 data/{ID}/boltz_input.fasta |
-| 5. AlphaFold 2.3.2 | Running (29/257) | 8851183 + 8855266 + 8854324 | 10 models/target, full_dbs + reduced_dbs fallback, 6 highmem targets |
+| 5. AlphaFold 2.3.2 | Running (90/257) | 8851183 + 8855266 (done) + 8854324 (done) | 10 models/target, full_dbs + reduced_dbs fallback, 6 highmem done |
 | 6. Boltz-1 v0.4.1 | Done (248/257) | - | 9 OOM targets (>3000 res), 2 targets with 1 model |
 | 7. Organize predictions | Waiting | - | Depends on Step 5 completing |
 | 8. Relaxation | Waiting | - | 7 protocols: 1 AMBER (done in Step 5) + 6 Rosetta x 5 replicates |

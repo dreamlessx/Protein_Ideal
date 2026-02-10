@@ -444,6 +444,50 @@ with reduced_dbs.
 
 ---
 
+## 2026-02-10 (cont.): AF Progress, INSTRUCTIONS.md, Repo Restructure
+
+### ClaudeChat Repo Restructured
+
+ClaudeChat was restructured by Red Pro-Ops:
+- Chat files moved from root to `projects/protein/`
+- `CHAT_3.md` renamed to `CHAT.md` (active thread)
+- `CHAT.md` renamed to `CHAT_1.md` (archived)
+- New: `SYSTEM_RULES.md` at root with global rules for all instances
+- Hierarchy formalized: dreamlessx → Red Pro-Ops → Workers (Blue, Green, Teal)
+- Context gauge required in every status update
+- Handoff notes format for low-context sessions
+
+### AF Progress: 90/257 (35%)
+
+| Category | Count | Notes |
+|----------|-------|-------|
+| Full success (10 models) | 87 | 5 ranked + 5 unrelaxed |
+| AMBER failure (5 unrelaxed) | 3 | 1ATN, 1DFJ, 1FC2 |
+| Currently running | 10 | Tasks 83-98 on job 8851183 |
+| Pending | 157 | In SLURM queue |
+| Highmem jobs | All 6 done | Job 8855266 complete |
+| 1MLC (fallback) | Done | Job 8854324 complete |
+
+AMBER failures on 1ATN, 1DFJ, 1FC2: all 5 unrelaxed models saved correctly by
+the safety logic in af_array.slurm. AMBER relaxation failed (likely empty residues
+or non-standard atoms), but the unrelaxed models are the baseline for Rosetta
+relaxation — so these targets will have 6 protocols (Rosetta only) instead of 7.
+
+### INSTRUCTIONS.md Created
+
+Per Red Pro-Ops directive, created `INSTRUCTIONS.md` in Protein_Ideal repo root with:
+- Role description and coordination workflow
+- Full pipeline configuration (AF, Boltz, Rosetta)
+- Working directory layout
+- Disk management policy
+- Boundaries (what Green does NOT do)
+
+### Disk: 24 GB
+
+Down from 28 GB after further AF cleanup. Well under 30 GB soft target.
+
+---
+
 ## Pending Steps
 - **Step 7**: Organize AF + Boltz predictions (depends on Steps 5+6 completing)
 - **Step 8**: Submit relaxation (7 protocols x 5 replicates)
