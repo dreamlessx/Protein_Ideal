@@ -488,6 +488,63 @@ Down from 28 GB after further AF cleanup. Well under 30 GB soft target.
 
 ---
 
+## 2026-02-15: AF Near-Complete, HHblits Retries, Disk Cleanup
+
+### AF Progress: 226/257 (88%)
+
+Main job 8851183 completed. Results:
+- 220 targets: full 10 models (5 ranked + 5 unrelaxed)
+- 6 AMBER failures: 1ATN, 1DFJ, 1FC2, 2BTF, 4CPA, 5JMO (5 unrelaxed each)
+- 31 targets: HHblits failure — all with `RuntimeError: HHblits failed` (titin/32763 residue limit)
+
+### Root Cause of 31 HHblits Failures
+
+Job 8851183 was submitted BEFORE the `reduced_dbs` fallback was added to `af_array.slurm`.
+SLURM copies scripts at submission time, so modifying the script file after submission has no
+effect on running/pending tasks. These 31 targets ran with the old script (no retry logic) and
+failed on the first HHblits attempt.
+
+### Resubmission: Job 9011401
+
+Cleaned failed af_out directories (had only MSAs, no models). Resubmitted all 31 as:
+```
+sbatch --array=109,134,157,...,252%10 af_array.slurm
+```
+Job 9011401 uses the current script with full_dbs → reduced_dbs fallback.
+Status: PENDING (QOSGrpGRES — GPU queue congested, 2189 pending cluster-wide).
+
+### AMBER Failure Comparison with Blue
+
+Blue reports 7 AMBER failures. Green confirms 6 of 7:
+
+| Target | Blue | Green |
+|--------|------|-------|
+| 1ATN | AMBER fail | AMBER fail |
+| 1DFJ | AMBER fail | AMBER fail |
+| 1FC2 | AMBER fail | AMBER fail |
+| 2BTF | AMBER fail | AMBER fail |
+| 4CPA | AMBER fail | AMBER fail |
+| 5JMO | AMBER fail | AMBER fail |
+| 1WEJ | AMBER fail | HHblits fail (in resubmit, will check) |
+
+### Disk Emergency and Cleanup
+
+Disk reached 66 GB (over 50 GB hard limit). Root cause: 34 targets retained MSAs and
+pickle files from failed or recently completed runs (cleanup script only runs on success).
+
+Cleaned all intermediates across all targets:
+- Removed msas/, features.pkl, result_model_*.pkl, relaxed_model_*.pdb, timings.json
+- Result: 66 GB → 30 GB
+
+### Boltz Audit (246 + 2 + 9 = 257)
+
+Full audit confirmed Boltz outputs in `boltz_out_dir/boltz_results_boltz_input/predictions/boltz_input/`:
+- 246 targets: 5 models
+- 2 targets (1GXD, 3EO1): 1 model
+- 9 targets: empty (permanently OOM, >3000 residues)
+
+---
+
 ## Pending Steps
 - **Step 7**: Organize AF + Boltz predictions (depends on Steps 5+6 completing)
 - **Step 8**: Submit relaxation (7 protocols x 5 replicates)
