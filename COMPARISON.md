@@ -168,12 +168,12 @@ is GPU vs CPU execution, which produces numerically equivalent results.
 | Parameter | Protein_Relax_Pipeline | Protein_Ideal |
 |-----------|----------------------|---------------|
 | Rosetta version | 3.14 | 3.15 |
-| Memory | 4 GB | TBD |
-| CPUs | 1 | TBD |
-| GPU | None (CPU only) | TBD |
-| Wall time | 48 h | TBD |
-| Account | `p_csb_meiler` | TBD |
-| Partition | `batch` (CPU) | TBD |
+| Memory | 4 GB | 4 GB |
+| CPUs | 1 | 1 |
+| GPU | None (CPU only) | None (CPU only) |
+| Wall time | 48 h | 48 h |
+| Account | `p_csb_meiler` | `p_csb_meiler` |
+| Partition | `batch` (CPU) | `batch` (CPU) |
 
 ### Protocols (identical names, 6 total)
 
@@ -205,13 +205,13 @@ is GPU vs CPU execution, which produces numerically equivalent results.
 
 | Behavior | Protein_Relax_Pipeline | Protein_Ideal |
 |----------|----------------------|---------------|
-| Replicates | 5 (`_r1` through `_r5`) | 5 (planned) |
-| Skip guard | None (always runs all 30) | TBD |
-| Input | Crystal PDB only (script) | TBD (crystal + AF + Boltz) |
-| Output format | `.pdb.gz` (compressed) | TBD |
-| Score file | `relax.fasc` per protocol dir | TBD |
-| Target discovery | Regex `[0-9A-Za-z]{4}` dirs under `$ROOT` | TBD |
-| PDB selection | `$code.pdb` > first `*.pdb` sorted | TBD |
+| Replicates | 5 (`_r1` through `_r5`) | 5 (`_r1` through `_r5`) |
+| Skip guard | None (always runs all 30) | `relax_finish.slurm`: checks for existing `.pdb.gz` output |
+| Input | Crystal PDB only (script) | AF (`ranked_*.pdb`) + Boltz (`boltz_input_model_*.pdb`) via `relax_test.slurm` |
+| Output format | `.pdb.gz` (compressed) | `.pdb.gz` (compressed) |
+| Score file | `relax.fasc` per protocol dir | `relax.fasc` per protocol dir |
+| Target discovery | Regex `[0-9A-Za-z]{4}` dirs under `$ROOT` | `find` for `*/AF/ranked_*.pdb` and `*/Boltz/boltz_input_model_*.pdb` |
+| PDB selection | `$code.pdb` > first `*.pdb` sorted | Per-model array indexing (each array task = 1 model × 6 protocols × 5 reps) |
 
 ### Key Differences
 
@@ -220,8 +220,18 @@ is GPU vs CPU execution, which produces numerically equivalent results.
 
 2. **Relaxation scope**: Pipeline script (`relax_predictions.slurm`) only relaxes
    crystal structure PDBs. Pipeline README documents relaxing all three sources
-   (crystal, AF, Boltz). Protein_Ideal intends to relax all three sources in a
-   unified framework.
+   (crystal, AF, Boltz). Protein_Ideal has separate scripts: `relax_predictions.slurm`
+   for crystal structures, `relax_test.slurm` for AI predictions (AF + Boltz), and
+   `relax_finish.slurm` for checkpoint-based recovery of incomplete jobs.
+
+3. **Array indexing**: Pipeline indexes over PDB directories (one task = one protein,
+   all 30 relaxations). Protein_Ideal's `relax_test.slurm` indexes over individual
+   model PDB files (one task = one model, all 6 protocols × 5 replicates = 30 runs).
+   This provides finer-grained parallelism but requires larger array sizes.
+
+4. **Common Rosetta flags**: Identical between pipelines (`-ignore_zero_occupancy false`,
+   `-nstruct 1`, `-no_nstruct_label`, `-out:pdb_gz`, `-flip_HNQ`, `-fa_max_dis 9.0`,
+   `-optimization:default_max_cycles 200`, `-out:levels all:warning`).
 
 ## Relaxation Protocol Summary
 
@@ -230,12 +240,12 @@ Both pipelines define 7 relaxation protocols:
 | # | Protocol | Method | Protein_Relax_Pipeline | Protein_Ideal |
 |---|----------|--------|----------------------|---------------|
 | 1 | AMBER (native) | AlphaFold OpenMM (ff14SB) | GPU relax during AF prediction | CPU relax during AF prediction |
-| 2 | cart_beta | Rosetta cartesian, beta_nov16 | 5 replicates | 5 replicates (planned) |
-| 3 | cart_ref15 | Rosetta cartesian, ref2015 | 5 replicates | 5 replicates (planned) |
-| 4 | dual_beta | Rosetta dualspace, beta_nov16 | 5 replicates | 5 replicates (planned) |
-| 5 | dual_ref15 | Rosetta dualspace, ref2015 | 5 replicates | 5 replicates (planned) |
-| 6 | norm_beta | Rosetta normal, beta_nov16 | 5 replicates | 5 replicates (planned) |
-| 7 | norm_ref15 | Rosetta normal, ref2015 | 5 replicates | 5 replicates (planned) |
+| 2 | cart_beta | Rosetta cartesian, beta_nov16 | 5 replicates | 5 replicates |
+| 3 | cart_ref15 | Rosetta cartesian, ref2015 | 5 replicates | 5 replicates |
+| 4 | dual_beta | Rosetta dualspace, beta_nov16 | 5 replicates | 5 replicates |
+| 5 | dual_ref15 | Rosetta dualspace, ref2015 | 5 replicates | 5 replicates |
+| 6 | norm_beta | Rosetta normal, beta_nov16 | 5 replicates | 5 replicates |
+| 7 | norm_ref15 | Rosetta normal, ref2015 | 5 replicates | 5 replicates |
 
 Applied to: crystal structures, AF unrelaxed predictions, and Boltz predictions.
 
@@ -248,8 +258,9 @@ Applied to: crystal structures, AF unrelaxed predictions, and Boltz predictions.
 | AF unrelaxed output | `af_out_unrelaxed/unrelaxed_model_*.pdb` | `af_out/sequence/unrelaxed_model_*.pdb` |
 | AF monomer/multimer | Separate subdirectories (`monomer/`, `multimer/`) in `af_out/` | Single directory (`sequence/`) in `af_out/` |
 | Boltz output dir name | `boltz_out/` | `boltz_out_dir/` |
+| Boltz model path | `boltz_out/predictions/boltz_input/boltz_model_*.pdb` | `boltz_out_dir/boltz_results_boltz_input/predictions/boltz_input/boltz_input_model_*.pdb` |
 | FASTA location | `data/{ID}/sequence/*.fasta` (globbed) | `data/{ID}/sequence.fasta` or `boltz_input.fasta` |
-| Relaxation output | `test_subset/{ID}/{protocol}/` | TBD |
+| Relaxation output | `test_subset/{ID}/{protocol}/` | `test/{ID}/AF/ranked_X/{protocol}/` and `test/{ID}/Boltz/boltz_input_model_X/{protocol}/` |
 | Cleaned PDBs | Unknown | `cleaned/{ID}.pdb` (via Rosetta `clean_pdb.py` array job) |
 
 ## Scripts
@@ -259,13 +270,15 @@ Applied to: crystal structures, AF unrelaxed predictions, and Boltz predictions.
 | AF prediction | `scripts/prediction/alphafold_array.slurm` | `scripts/run/af_array.slurm` |
 | AF highmem | N/A | `scripts/run/af_array_highmem.slurm` (128 GB) |
 | Boltz prediction | `scripts/prediction/boltz_array.slurm` | `scripts/run/boltz_array.slurm` |
-| Relaxation | `scripts/relaxation/relax_predictions.slurm` | TBD |
+| Relaxation (crystal) | `scripts/relaxation/relax_predictions.slurm` | `scripts/relaxation/relax_predictions.slurm` (shared) |
+| Relaxation (AI pred.) | N/A | `scripts/relaxation/relax_test.slurm` (AF + Boltz) |
+| Relaxation (resume) | N/A | `scripts/relaxation/relax_finish.slurm` (checkpoint-based) |
 | PDB cleaning | `scripts/data_preparation/clean_pdbs.sh` (serial) | `scripts/run/clean_array.slurm` (array) |
 | FASTA download | `scripts/data_preparation/download_fastas.py` | Same (with Python 3.9 fix) |
 | FASTA organize | `scripts/data_preparation/organize_fastas.py` | N/A (done inline) |
 | Boltz FASTA prep | `scripts/data_preparation/prepare_boltz_fastas.py` | N/A (done inline) |
-| Metrics collection | `scripts/analysis/collect_metrics.py` | TBD |
-| MolProbity | `scripts/validation/run_molprobity.sh` | TBD |
+| Metrics collection | `scripts/analysis/collect_metrics.py` | Pending |
+| MolProbity | `scripts/validation/run_molprobity.sh` | Pending |
 
 ## FASTA Handling
 
@@ -312,11 +325,37 @@ The most significant methodological differences that could affect results:
    with reduced_dbs fallback. Full_dbs uses HHblits + BFD + UniRef30; reduced_dbs uses
    jackhmmer + small_bfd.
 
+   **Critical issue discovered in Protein_Ideal**: 31 targets failed with `RuntimeError:
+   HHblits failed` because the main AF job (8851183) was submitted BEFORE the `reduced_dbs`
+   fallback was added to `af_array.slurm`. SLURM copies the script at submission time —
+   modifying the script after submission has no effect on running jobs. These 31 targets
+   hit the BFD titin-like sequence issue (32763 residue limit for immunoglobulin domains)
+   with no fallback available. Root cause: script versioning, not a code bug.
+
+   **Resolution**: Cleaned failed `af_out/` directories and resubmitted as job 9011401
+   with the current script containing the fallback logic.
+
 8. **AMBER crash recovery**: Both pipelines run AMBER on all 5 models
-   (`--models_to_relax=all`). If AMBER crashes (e.g., 1ATN: `ValueError: residue with
+   (`--models_to_relax=all`). If AMBER crashes (e.g., `ValueError: residue with
    no atoms`), unrelaxed models survive as baseline for Rosetta relaxation. The script
    detects partial output (unrelaxed models present, no ranking_debug.json) and preserves
    them rather than deleting everything during a reduced_dbs retry.
+
+   **AMBER failures across pipelines (6 confirmed in Protein_Ideal):**
+
+   | Target | Protein_Relax_Pipeline | Protein_Ideal | Error |
+   |--------|----------------------|---------------|-------|
+   | 1ATN | AMBER fail | AMBER fail | `ValueError: residue with no atoms` |
+   | 1DFJ | AMBER fail | AMBER fail | AMBER crash |
+   | 1FC2 | AMBER fail | AMBER fail | AMBER crash |
+   | 1WEJ | AMBER fail | HHblits fail (pre-fallback); pending resubmit | TBD after job 9011401 |
+   | 2BTF | AMBER fail | AMBER fail | AMBER crash |
+   | 4CPA | AMBER fail | AMBER fail | AMBER crash |
+   | 5JMO | AMBER fail | AMBER fail | AMBER crash |
+
+   All AMBER-failed targets retain 5 unrelaxed models for Rosetta relaxation.
+   Pipeline reports 7 AMBER failures; Protein_Ideal confirms 6 of 7 (1WEJ was an
+   HHblits failure due to missing fallback — see item #13).
 
 9. **Boltz GPU tiering**: Pipeline uses single L40S tier. Protein_Ideal stratifies by
    residue count:
@@ -347,3 +386,35 @@ The most significant methodological differences that could affect results:
     irrelevant (MolProbity, clashscore, Ramachandran are chain-order-independent). For
     DockQ comparison, proper alignment handles this. If both pipelines produce consistent
     relaxation results despite different chain order, this demonstrates robustness.
+
+13. **SLURM script versioning**: Protein_Ideal's main AF job (8851183, 257 tasks) was
+    submitted before the `reduced_dbs` fallback was added to `af_array.slurm`. SLURM
+    snapshots the script at submission time, so 31 targets that hit HHblits failures
+    had no fallback available and failed outright. These were resubmitted as job 9011401
+    with the corrected script. Pipeline did not encounter this issue because the fallback
+    was built in from the start. **Lesson**: always verify the submitted script version
+    matches the intended logic before launching large array jobs.
+
+14. **Disk management**: Protein_Ideal operates under a 50 GB hard limit / 30 GB soft
+    target on ACCRE. AF intermediate files (MSAs, pickles) can consume ~1 GB per target.
+    After 226 targets completed, disk hit 66 GB before emergency cleanup (MSAs, pickles,
+    failed af_out dirs) brought it back to 30 GB. The cleanup script in `af_array.slurm`
+    only runs on success — failed jobs leave intermediates behind. Pipeline operates on
+    `/dors/meilerlab/` which has larger quotas.
+
+15. **Production status comparison** (as of Feb 2026):
+
+    | Milestone | Protein_Relax_Pipeline | Protein_Ideal |
+    |-----------|----------------------|---------------|
+    | AF predictions | 257/257 complete | 226/257 + 31 retrying (job 9011401) |
+    | Boltz predictions | 257/257 submitted | 248/257 complete (9 OOM, AF-only) |
+    | AMBER failures | 7 targets | 6 confirmed + 1 pending (1WEJ) |
+    | Rosetta relaxation | Submitted (job 9011271) | Pending AF completion |
+    | MolProbity | Pending | Pending |
+
+16. **Relaxation script architecture**: Pipeline uses a single `relax_predictions.slurm`
+    that iterates over PDB directories (crystal structures only). Protein_Ideal has three
+    complementary scripts:
+    - `relax_predictions.slurm` — crystal structure relaxation (per-directory indexing)
+    - `relax_test.slurm` — AI prediction relaxation (per-model indexing, AF + Boltz)
+    - `relax_finish.slurm` — checkpoint recovery (scans for missing replicates, per-job indexing)

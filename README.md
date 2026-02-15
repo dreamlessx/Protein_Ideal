@@ -51,7 +51,7 @@ AF2_DATADIR=/csbtmp/alphafold-data.230
 # Boltz-1 v0.4.1
 BOLTZ_MINICONDA=/sb/apps/boltz1-v0.4.1/miniconda3
 
-# Rosetta 3.14
+# Rosetta 3.15
 RELAX=/data/p_csb_meiler/apps/rosetta/rosetta-3.15/main/source/bin/relax.linuxgccrelease
 ROSETTA_DB=/data/p_csb_meiler/apps/rosetta/rosetta-3.15/main/database
 CLEAN_SCRIPT=/data/p_csb_meiler/apps/rosetta/rosetta-3.15/main/tools/protein_tools/scripts/clean_pdb.py
@@ -455,6 +455,16 @@ preserves unrelaxed output instead of deleting everything during the reduced_dbs
 **Known OOM targets at 64GB (require 128GB highmem script):**
 1AHW, 1ATN, 1DFJ, 1DQJ, 1E6J, 1FC2, 1IRA, 1JWH, 1MLC (all large multimer complexes)
 
+**AMBER relaxation failures (5 unrelaxed models saved, no ranked PDBs):**
+1ATN, 1DFJ, 1FC2, 2BTF, 4CPA, 5JMO (6 targets). These targets produce unrelaxed models
+successfully but crash during AMBER/OpenMM relaxation. The unrelaxed models are used
+directly for Rosetta relaxation benchmarking.
+
+**HHblits failures (31 targets, resubmitted with reduced_dbs fallback):**
+If the main job was submitted before the fallback logic was added to the script, HHblits
+failures will not trigger the `reduced_dbs` retry. Clean failed `af_out/` directories and
+resubmit with the current script version.
+
 ### Expected Output
 
 After cleanup, 10 models per target are retained:
@@ -493,6 +503,9 @@ for d in data/*/af_out/*/; do
 done
 echo "AlphaFold complete: $completed"
 # Expected: 257/257 when all jobs finish
+# Note: 6 AMBER failures (1ATN, 1DFJ, 1FC2, 2BTF, 4CPA, 5JMO) have
+# unrelaxed models only — no ranking_debug.json. Check with:
+# ls data/*/af_out/*/unrelaxed_model_*.pdb | sed 's|/af_out/.*||' | sort -u | wc -l
 
 # Verify a specific prediction
 ls data/1AK4/af_out/sequence/ranked_*.pdb | wc -l
@@ -577,7 +590,11 @@ for d in data/*/boltz_out_dir/; do
     fi
 done
 echo "Boltz complete: $completed"
-# Expected: 248/257 (9 targets OOM on all GPUs, >3000 residues)
+# Expected: 248/257 (246 with 5 models, 2 with 1 model, 9 OOM)
+# 9 permanent OOM targets (>3000 residues, AF-only):
+#   1DE4, 1K5D, 1N2C, 1WDW, 1ZM4, 3BIW, 3L89, 4GXU, 6EY6
+# 2 targets with 1 model (XL tier, H100 80GB, 1 diffusion sample):
+#   1GXD, 3EO1
 
 # Verify a specific prediction
 find data/1AK4/boltz_out_dir -name '*.pdb' | wc -l
@@ -918,12 +935,14 @@ head -5 metrics.tsv
 | 2 | `download_fastas.py` | **PASS** | 2-3 PDB IDs may fail (obsolete/invalid) |
 | 3 | `organize_fastas.py` | **PASS** | No issues |
 | 4 | `prepare_boltz_fastas.py` | **PASS with caveat** | Unusual FASTA headers may default to chain A |
-| 5 | `af_array.slurm` | **PASS** | 64GB RAM; 128GB highmem variant for 9 OOM targets |
+| 5 | `af_array.slurm` | **PASS** | 64GB RAM; 128GB highmem variant for 9 OOM targets; 6 AMBER failures; 31 HHblits retries |
 | 5 | `af_array_highmem.slurm` | **PASS** | 128GB RAM for large multimer complexes |
-| 6 | `boltz_array.slurm` | **PASS** | MSA server needs internet from compute node |
+| 6 | `boltz_array.slurm` | **PASS** | MSA server needs internet from compute node; 248/257 complete |
 | 6 | `boltz_single.slurm` | **PASS** | Same MSA server caveat |
 | 7 | Organize predictions | Manual | No script — documented above |
-| 8 | `relax_predictions.slurm` | **PASS with caveat** | 48h may timeout for large complexes; 4GB RAM may be tight |
+| 8 | `relax_predictions.slurm` | **PASS with caveat** | Crystal structures; 48h may timeout for large complexes |
+| 8 | `relax_test.slurm` | **PASS** | AI predictions (AF + Boltz); per-model array indexing |
+| 8 | `relax_finish.slurm` | **PASS with caveat** | Checkpoint recovery; uses `$protocol` instead of `$PROTOCOL` (line 108 bug) |
 | 9 | `run_molprobity.sh` | **PASS** | Phenix version-dependent output parsing |
 | 10 | `collect_metrics.py` | **PASS** | No issues |
 
@@ -979,6 +998,35 @@ NA,NA,NA,NA...
 phenix.molprobity input.pdb keep_hydrogens=True
 cat molprobity.out
 ```
+
+### HHblits Failures Despite Fallback in Script
+
+```
+RuntimeError: HHblits failed on the input
+```
+**Cause:** SLURM copies the submission script at job submission time. If the `reduced_dbs`
+fallback was added to `af_array.slurm` AFTER the job was submitted, running tasks use the
+old version without fallback.
+
+**Fix:**
+1. Identify failed targets: `for d in data/*/af_out; do [ -d "$d" ] && [ ! -f "$d"/*/ranking_debug.json ] && ls "$d"/*/unrelaxed_model_*.pdb 2>/dev/null | wc -l | grep -q '^0$' && echo "$(basename $(dirname $d))"; done`
+2. Clean failed output: `rm -rf data/{TARGET}/af_out`
+3. Resubmit with current script: `sbatch --array=<IDS> af_array.slurm`
+
+### Disk Space Emergency
+
+```
+Disk quota exceeded
+```
+**Fix:** AF intermediates consume ~1 GB per target (MSAs, pickles). Clean manually:
+```bash
+for d in data/*/af_out/*/; do
+    rm -rf "$d/msas" "$d/features.pkl" "$d/result_model_"*.pkl "$d/timings.json" 2>/dev/null
+    # Remove relaxed_model_*.pdb (duplicates of ranked_*.pdb)
+    rm -f "$d/relaxed_model_"*.pdb 2>/dev/null
+done
+```
+Monitor with `du -sh /data/p_csb_meiler/agarwm5/protein_ideal_test/benchmarking/`.
 
 ### FASTA Download Failures
 
