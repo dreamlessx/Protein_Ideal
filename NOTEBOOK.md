@@ -341,11 +341,11 @@ The mapping between ranked and unrelaxed models is in `ranking_debug.json`. For 
 | XL | H100 80GB | 1 | 11 targets (>2200 res) | 2/11 ✓ |
 
 **Final Boltz tally: 248/257** (96.5%)
-- 245 targets with 5 models
+- 246 targets with 5 models
 - 2 targets (1GXD, 3EO1) with 1 model
-- 1 target (4GXU, 5730 res) may succeed with 1 sample on larger GPU — testing
+- 9 permanently OOMed (>3000 residues, AF-only)
 
-**9 permanently OOMed targets** (all >3000 residues, AF-only):
+**9 permanently OOMed targets:**
 1DE4(3042), 1K5D(3212), 1N2C(3182), 1WDW(3798), 1ZM4(3147),
 3BIW(3268), 3L89(3924), 4GXU(5730), 6EY6(3624)
 
@@ -438,7 +438,7 @@ with reduced_dbs.
 ### Boltz Final Status
 
 248/257 (96.5%) — no changes from earlier:
-- 245 targets: 5 models (standard)
+- 246 targets: 5 models (standard)
 - 2 targets (1GXD, 3EO1): 1 model (H100 1-sample)
 - 9 targets: permanently OOMed (>3000 residues, AF-only)
 
