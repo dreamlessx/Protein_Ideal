@@ -38,7 +38,7 @@ with relaxation across 7 protocols (1 AMBER/OpenMM + 6 Rosetta).
 - **Database preset**: Full databases (HHblits + BFD + UniRef30), `reduced_dbs` fallback on HHblits failure
 - **Input verification**: Green's FASTAs verified against authoritative set — 0 sequence mismatches (251/251)
 - **DNA/RNA policy**: DNA/RNA chains excluded from all prediction FASTAs (protein-only). Fixed 3P57 and 1H9D.
-- **Disk usage**: ~30 GB (cleaned from 66 GB after MSA purge; under 50 GB hard limit)
+- **Disk usage**: ~10 GB (cleaned 31 GB of AF stderr logs; under 50 GB hard limit)
 
 ## FASTA Acquisition Notes
 
@@ -115,7 +115,7 @@ during the bulk download (files already existed).
 1HCF  1JPS  1K74  1VFB  2I25
 ```
 
-### Full BM5.5 Prediction (257 targets) - IN PROGRESS
+### Full BM5.5 Prediction (246 active targets) - ROSETTA RUNNING
 
 | Step | Status | SLURM Job(s) | Notes |
 |------|--------|-------------|-------|
@@ -126,10 +126,10 @@ during the bulk download (files already existed).
 | 4. Prepare Boltz input | Done | - | 257 data/{ID}/boltz_input.fasta |
 | 5. AlphaFold 2.3.2 | **Done (246/246)** | 8851183 + 8855266 + 8854324 + 9011401 + 9174798 + 9174799 | All complete. 7 AMBER failures resolved via FASTA fix |
 | 6. Boltz-1 v0.4.1 | **Done (246/246)** | - | 11 OOM targets excluded (9 full + 2 partial). 5 models per target |
-| 7. Rosetta relaxation | Ready to submit | - | 6 protocols x 5 replicates on AF + Boltz + crystal structures |
-| 8. AMBER relaxation | **Done (in Step 5)** | - | All 257 targets have 5 ranked (AMBER-relaxed) PDBs |
-| 9. MolProbity validation | Waiting | - | Phenix + reduce |
-| 10. Collect metrics | Waiting | - | PyMOL RMSD + Rosetta energies |
+| 7. Rosetta relaxation | **Running** | 9194317 (AI) + 9195061 (crystal) | 6 protocols x 5 reps. 2,460 AF + Boltz tasks, 246 crystal tasks |
+| 8. AMBER relaxation | **Done (in Step 5)** | - | All 246 targets have 5 ranked (AMBER-relaxed) PDBs |
+| 9. MolProbity validation | Waiting on Rosetta | - | Phenix + reduce |
+| 10. Collect metrics | Waiting on Rosetta | - | PyMOL RMSD + Rosetta energies |
 
 ## Relaxation Protocols
 
@@ -196,9 +196,8 @@ during the bulk download (files already existed).
 
 ## Validation Pipeline (TODO)
 
-- [ ] MolProbity validation on all 6,820 structures (20-protein subset)
-- [ ] MolProbity validation on full 257-target run
-- [ ] ProteinBusters validation
+- [ ] MolProbity validation on full 246-target run (~80,000 structures)
+- [ ] PoseBusters validation
 - [ ] Statistical analysis and figures
 - [ ] Manuscript preparation
 

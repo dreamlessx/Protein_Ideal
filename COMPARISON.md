@@ -10,15 +10,18 @@ All values verified against actual SLURM scripts and READMEs in both repositorie
 | | Protein_Relax_Pipeline | Protein_Ideal |
 |---|---|---|
 | Dataset | BM5.5 full | BM5.5 full |
-| Total targets | 257 | 257 |
-| Rigid-body | 162 | 162 |
-| Medium | 60 | 60 |
-| Difficult | 35 | 35 |
+| Total BM5.5 targets | 257 | 257 |
+| Active benchmark | 257 | **246** (11 excluded: Boltz OOM on large symmetric complexes) |
+| Rigid-body | 162 | ~155 (after exclusions) |
+| Medium | 60 | ~57 (after exclusions) |
+| Difficult | 35 | ~34 (after exclusions) |
 | Non-standard IDs | BAAD, BOYV, BP57, CP57 | BAAD, BOYV, BP57, CP57 (sequences extracted from ATOM records) |
 | Obsolete PDBs | Unknown | 1A2K (replaced by 5BXQ), 3RVW (replaced by 5VPG) |
 
-Both pipelines now target the full BM5.5 benchmark (257 complexes). Pipeline originally had
+Both pipelines target the full BM5.5 benchmark (257 complexes). Pipeline originally had
 15 extra non-BM5.5 entries from the benchmark5.5.tgz archive which were removed.
+Protein_Ideal excludes 11 targets where Boltz-1 OOMs (large symmetric complexes with
+>2,200 total residues across all physical chains), reducing the active benchmark to 246.
 
 ## AlphaFold 2.3.2 Configuration
 

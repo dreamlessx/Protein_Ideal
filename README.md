@@ -137,9 +137,9 @@ done
 ### Verification Checkpoint
 
 ```bash
-# Should have 257 PDB files (BM5.5 = 162 rigid + 60 medium + 35 difficult)
+# Should have 246 PDB files (257 BM5.5 minus 11 excluded Boltz OOM targets)
 ls merged/*.pdb | wc -l
-# Expected: 257
+# Expected: 246
 
 # Each PDB should have ATOM records with multiple chains
 grep -c '^ATOM' merged/1AK4.pdb
@@ -455,10 +455,12 @@ preserves unrelaxed output instead of deleting everything during the reduced_dbs
 **Known OOM targets at 64GB (require 128GB highmem script):**
 1AHW, 1ATN, 1DFJ, 1DQJ, 1E6J, 1FC2, 1IRA, 1JWH, 1MLC (all large multimer complexes)
 
-**AMBER relaxation failures (5 unrelaxed models saved, no ranked PDBs):**
-1ATN, 1DFJ, 1FC2, 2BTF, 4CPA, 5JMO (6 targets). These targets produce unrelaxed models
-successfully but crash during AMBER/OpenMM relaxation. The unrelaxed models are used
-directly for Rosetta relaxation benchmarking.
+**AMBER relaxation failures — ALL RESOLVED:**
+7 targets (1ATN, 1DFJ, 1FC2, 1WEJ, 2BTF, 4CPA, 5JMO) originally failed AMBER relaxation
+due to non-standard residues (X/Z) in FASTA sequences. Root cause identified by Blue:
+AlphaFold can't place atoms for X (unknown AA) and Z (ambiguous Glu/Gln), causing AMBER's
+`_check_residues_are_well_defined()` to reject the model. Fix: trimmed X/Z from FASTA
+terminals. All 7 now have full 10 models (5 ranked + 5 unrelaxed).
 
 **HHblits failures (31 targets, resubmitted with reduced_dbs fallback):**
 If the main job was submitted before the fallback logic was added to the script, HHblits
@@ -502,10 +504,7 @@ for d in data/*/af_out/*/; do
     fi
 done
 echo "AlphaFold complete: $completed"
-# Expected: 257/257 when all jobs finish
-# Note: 6 AMBER failures (1ATN, 1DFJ, 1FC2, 2BTF, 4CPA, 5JMO) have
-# unrelaxed models only — no ranking_debug.json. Check with:
-# ls data/*/af_out/*/unrelaxed_model_*.pdb | sed 's|/af_out/.*||' | sort -u | wc -l
+# Expected: 246/246 (all active benchmark targets)
 
 # Verify a specific prediction
 ls data/1AK4/af_out/sequence/ranked_*.pdb | wc -l
@@ -590,11 +589,10 @@ for d in data/*/boltz_out_dir/; do
     fi
 done
 echo "Boltz complete: $completed"
-# Expected: 248/257 (246 with 5 models, 2 with 1 model, 9 OOM)
-# 9 permanent OOM targets (>3000 residues, AF-only):
-#   1DE4, 1K5D, 1N2C, 1WDW, 1ZM4, 3BIW, 3L89, 4GXU, 6EY6
-# 2 targets with 1 model (XL tier, H100 80GB, 1 diffusion sample):
-#   1GXD, 3EO1
+# Expected: 246/246 (all active benchmark targets, 5 models each)
+# 11 targets excluded from benchmark due to Boltz OOM:
+#   9 full OOM (>3000 total residues): 1DE4, 1K5D, 1N2C, 1WDW, 1ZM4, 3BIW, 3L89, 4GXU, 6EY6
+#   2 partial OOM (1/5 models only): 1GXD, 3EO1
 
 # Verify a specific prediction
 find data/1AK4/boltz_out_dir -name '*.pdb' | wc -l
@@ -935,9 +933,9 @@ head -5 metrics.tsv
 | 2 | `download_fastas.py` | **PASS** | 2-3 PDB IDs may fail (obsolete/invalid) |
 | 3 | `organize_fastas.py` | **PASS** | No issues |
 | 4 | `prepare_boltz_fastas.py` | **PASS with caveat** | Unusual FASTA headers may default to chain A |
-| 5 | `af_array.slurm` | **PASS** | 64GB RAM; 128GB highmem variant for 9 OOM targets; 6 AMBER failures; 31 HHblits retries |
+| 5 | `af_array.slurm` | **PASS** | 64GB RAM; 128GB highmem variant for large complexes; 7 AMBER failures resolved via FASTA fix |
 | 5 | `af_array_highmem.slurm` | **PASS** | 128GB RAM for large multimer complexes |
-| 6 | `boltz_array.slurm` | **PASS** | MSA server needs internet from compute node; 248/257 complete |
+| 6 | `boltz_array.slurm` | **PASS** | MSA server needs internet from compute node; 246/246 complete |
 | 6 | `boltz_single.slurm` | **PASS** | Same MSA server caveat |
 | 7 | Organize predictions | Manual | No script — documented above |
 | 8 | `relax_predictions.slurm` | **PASS with caveat** | Crystal structures; 48h may timeout for large complexes |
