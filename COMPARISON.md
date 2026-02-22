@@ -373,13 +373,14 @@ The most significant methodological differences that could affect results:
    | Highmem | H100 80GB | 5 | 1300-2200 | 14 | 12/14 |
    | XL | H100 80GB | 1 | >2200 | 11 | 2/11 |
 
-   9 targets with >3,000 total residues (all physical chains including symmetric copies)
-   permanently OOMed on all GPUs. Root cause: Boltz pairwise attention scales quadratically
-   with total residues; large symmetric complexes (6-24 chains) exceed H100 80GB VRAM.
+   9 targets with >3,000 total residues permanently OOMed (0/5 models). 2 additional
+   targets (1GXD, 3EO1) in the 2,200-3,000 range produced only 1/5 models (OOM at 5
+   diffusion samples, succeeded at 1). All 11 excluded from the benchmark to maintain
+   a consistent dataset where every target has 5 AF + 5 Boltz models.
 
-   **These 9 targets were excluded from the entire benchmark** (not just Boltz) to maintain
-   a consistent AF-vs-Boltz comparison. Benchmark reduced from 257 → **248 targets**.
-   Excluded: 1DE4, 1K5D, 1N2C, 1WDW, 1ZM4, 3BIW, 3L89, 4GXU, 6EY6.
+   **Benchmark reduced from 257 → 246 targets.**
+   Excluded (full OOM): 1DE4, 1K5D, 1N2C, 1WDW, 1ZM4, 3BIW, 3L89, 4GXU, 6EY6.
+   Excluded (partial OOM): 1GXD, 3EO1.
 
 10. **DNA/RNA exclusion**: Both pipelines exclude DNA/RNA chains from prediction FASTAs.
     BM5.5 is a protein-protein benchmark; neither AF nor Boltz supports nucleic acids.
@@ -418,9 +419,9 @@ The most significant methodological differences that could affect results:
 
     | Milestone | Protein_Relax_Pipeline | Protein_Ideal |
     |-----------|----------------------|---------------|
-    | Active benchmark targets | 257 | **248** (9 excluded: Boltz OOM, >3000 total residues) |
-    | AF predictions | 257/257 complete | **248/248 complete** |
-    | Boltz predictions | 257/257 submitted | **248/248 complete** |
+    | Active benchmark targets | 257 | **246** (11 excluded: Boltz OOM) |
+    | AF predictions | 257/257 complete | **246/246 complete** (5 models each) |
+    | Boltz predictions | 257/257 submitted | **246/246 complete** (5 models each) |
     | AMBER failures | 7 targets (unresolved) | **0 (all 7 resolved via FASTA fix)** |
     | Rosetta relaxation | Submitted (job 9011271) | Pending submission |
     | MolProbity | Pending | Pending |

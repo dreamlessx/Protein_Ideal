@@ -638,18 +638,32 @@ OOM threshold on our largest available GPU (H100 80GB).
 **What would be needed**: Multi-GPU model parallelism (not supported by Boltz-1 v0.4.1)
 or GPUs with >160 GB VRAM (e.g., A100 160GB, H200 — not available on ACCRE).
 
-**Files updated**: `bm55_pdb_list.txt`, `af_dirlist.txt` (257 → 248 entries).
+**Files updated**: `bm55_pdb_list.txt`, `af_dirlist.txt` (257 → 246 entries).
 AF predictions, cleaned PDBs, merged PDBs, and FASTA files removed from GitHub repo.
 
-### Revised Benchmark: 248 Targets
+### 2 Additional Targets Excluded — Incomplete Boltz Models
+
+**1GXD** and **3EO1** produced only **1 Boltz model** instead of 5. These targets are in
+the 2,200-3,000 total residue range — too large for 5 diffusion samples on H100 80GB,
+but able to squeeze through with 1 sample. Since every other target has 5 Boltz models,
+keeping these 2 with only 1 model would create an inconsistent dataset for statistical
+comparison. Excluded for consistency.
+
+| Target | Total Residues | Boltz Models | Reason |
+|--------|---------------|--------------|--------|
+| 1GXD | ~2,400 | 1 (of 5) | OOM at 5 samples; 1 sample succeeded but inconsistent |
+| 3EO1 | ~2,600 | 1 (of 5) | OOM at 5 samples; 1 sample succeeded but inconsistent |
+
+### Revised Benchmark: 246 Targets
 
 | Category | Count |
 |----------|-------|
 | Total BM5.5 targets | 257 |
-| Excluded (Boltz OOM) | 9 |
-| **Active benchmark** | **248** |
-| AF predictions | 248/248 (100%) |
-| Boltz predictions | 248/248 (100%) |
+| Excluded (full OOM, >3000 res) | 9 |
+| Excluded (partial OOM, 1/5 models) | 2 |
+| **Active benchmark** | **246** |
+| AF predictions | 246/246 — 5 models each (1,230 PDBs) |
+| Boltz predictions | 246/246 — 5 models each (1,230 PDBs) |
 
 ---
 
