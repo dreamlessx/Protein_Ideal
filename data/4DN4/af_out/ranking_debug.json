@@ -1,0 +1,16 @@
+{
+    "iptm+ptm": {
+        "model_1_multimer_v3_pred_0": 0.827456448711055,
+        "model_2_multimer_v3_pred_0": 0.8379848842634094,
+        "model_3_multimer_v3_pred_0": 0.8295645168218814,
+        "model_4_multimer_v3_pred_0": 0.8366641819501314,
+        "model_5_multimer_v3_pred_0": 0.8039764788772265
+    },
+    "order": [
+        "model_2_multimer_v3_pred_0",
+        "model_4_multimer_v3_pred_0",
+        "model_3_multimer_v3_pred_0",
+        "model_1_multimer_v3_pred_0",
+        "model_5_multimer_v3_pred_0"
+    ]
+}
