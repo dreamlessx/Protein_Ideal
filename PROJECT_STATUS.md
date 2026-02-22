@@ -12,9 +12,9 @@ with relaxation across 7 protocols (1 AMBER/OpenMM + 6 Rosetta).
 
 ## Dataset: PP Docking Benchmark 5.5
 
-- **Total complexes in BM5.5**: 257
-- **FASTA sequences obtained**: 257/257 (see [FASTA Acquisition Notes](#fasta-acquisition-notes))
-- **Boltz input prepared**: 257/257
+- **Total complexes in BM5.5**: 257 (248 active, 9 excluded)
+- **FASTA sequences obtained**: 248/248 (9 OOM targets excluded)
+- **Boltz input prepared**: 248/248
 
 ### Previous Runs (Original Pipeline)
 
@@ -28,12 +28,13 @@ with relaxation across 7 protocols (1 AMBER/OpenMM + 6 Rosetta).
 - **Working directory**: `protein_ideal_test/benchmarking/`
 - **Targets prepared**: 257
 - **Clean PDBs**: Done (257/257)
-- **AlphaFold**: **257/257 complete (100%)**
-  - All 257 targets: full 10 models (5 ranked + 5 unrelaxed)
-  - 7 AMBER failures (1ATN, 1DFJ, 1FC2, 1WEJ, 2BTF, 4CPA, 5JMO): **all resolved** via FASTA fix (trimmed X/Z non-standard residues)
-  - 31 HHblits retries: all completed with reduced_dbs fallback
-  - Jobs: 8851183 (main) + 8855266 (highmem) + 8854324 (1MLC) + 9011401 (HHblits retries) + 9174798/9174799 (AMBER fixes)
-- **Boltz-1**: 248/257 complete (96.5%). 9 targets OOM on all GPUs (>3000 residues, AF-only)
+- **Active benchmark**: **248 targets** (9 excluded — Boltz OOM on large symmetric complexes >3000 total residues)
+- **AlphaFold**: **248/248 complete (100%)**
+  - All 248 targets: full 10 models (5 ranked + 5 unrelaxed)
+  - 7 AMBER failures resolved via FASTA fix (trimmed X/Z non-standard residues)
+  - 31 HHblits retries completed with reduced_dbs fallback
+- **Boltz-1**: **248/248 complete (100%)**
+  - 246 targets: 5 models, 2 targets (1GXD, 3EO1): 1 model
 - **AF config**: `--nouse_gpu_relax --models_to_relax=all` (AMBER relax all 5 models on CPU)
 - **AF output**: 10 models per target (5 AMBER-relaxed `ranked_*.pdb` + 5 unrelaxed `unrelaxed_model_*.pdb`)
 - **Database preset**: Full databases (HHblits + BFD + UniRef30), `reduced_dbs` fallback on HHblits failure
@@ -125,8 +126,8 @@ during the bulk download (files already existed).
 | 2. Download FASTAs | Done | - | 249 RCSB + 2 obsolete replacements + 4 PDB-extracted + 2 pre-existing |
 | 3. Organize FASTAs | Done | - | 257 data/{ID}/sequence.fasta |
 | 4. Prepare Boltz input | Done | - | 257 data/{ID}/boltz_input.fasta |
-| 5. AlphaFold 2.3.2 | **Done (257/257)** | 8851183 + 8855266 + 8854324 + 9011401 + 9174798 + 9174799 | All complete. 7 AMBER failures resolved via FASTA fix (X/Z residue trimming) |
-| 6. Boltz-1 v0.4.1 | Done (248/257) | - | 9 OOM targets (>3000 res), 2 targets with 1 model |
+| 5. AlphaFold 2.3.2 | **Done (248/248)** | 8851183 + 8855266 + 8854324 + 9011401 + 9174798 + 9174799 | All complete. 7 AMBER failures resolved via FASTA fix |
+| 6. Boltz-1 v0.4.1 | **Done (248/248)** | - | 9 OOM targets excluded from benchmark. 2 targets (1GXD, 3EO1) with 1 model |
 | 7. Rosetta relaxation | Ready to submit | - | 6 protocols x 5 replicates on AF + Boltz + crystal structures |
 | 8. AMBER relaxation | **Done (in Step 5)** | - | All 257 targets have 5 ranked (AMBER-relaxed) PDBs |
 | 9. MolProbity validation | Waiting | - | Phenix + reduce |

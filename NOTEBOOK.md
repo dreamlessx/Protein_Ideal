@@ -602,23 +602,61 @@ All prediction data pushed to GitHub (Protein_Ideal repo) as disaster recovery:
 
 Total: ~4,345 files, ~2.5 GB. Within GitHub's 5 GB limit (PDBs only, no MSAs/logs).
 
-### Boltz Status: 248/257 (96.5%)
+### 9 Targets Excluded from Benchmark — Boltz OOM
 
-Unchanged. 9 targets permanently OOM on all available GPUs:
+**Decision**: Remove 9 targets entirely from all datasets (AF, Boltz, crystal, list files).
+These targets cannot be predicted by Boltz-1, so they cannot participate in the AF-vs-Boltz
+comparison that is central to this benchmark. Keeping them would create an inconsistent
+dataset where some targets have both predictors and others only have AF.
 
-| Target | Residues | Status |
-|--------|----------|--------|
-| 1DE4 | 3042 | OOM (L40S 48GB + H100 80GB) |
-| 1K5D | 3212 | OOM |
-| 1N2C | 3182 | OOM |
-| 1WDW | 3798 | OOM |
-| 1ZM4 | 3147 | OOM |
-| 3BIW | 3268 | OOM |
-| 3L89 | 3924 | OOM |
-| 4GXU | 5730 | OOM |
-| 6EY6 | 3624 | OOM |
+**Root cause**: Boltz-1's diffusion architecture uses pairwise attention that scales
+quadratically with total input residues. All 9 targets are **large symmetric complexes**
+where the total residue count across all physical chains exceeds 3,000 — the empirical
+OOM threshold on our largest available GPU (H100 80GB).
 
-These exceed GPU VRAM even with 1 diffusion sample on H100 80GB. AF-only targets.
+**Common characteristics**:
+- All 9 are multi-chain protein complexes with high symmetry (6-24 physical chains)
+- All 9 have >3,000 total residues when counting all physical chain copies
+- The OOM is driven by chain multiplicity × monomer size, not monomer size alone
+  (e.g., 3L89 has only 327 unique AA but 24 physical chains = 3,924 total residues)
+- Even reducing Boltz to 1 diffusion sample (minimum) on H100 80GB was insufficient
+
+**Excluded targets**:
+
+| Target | Unique AA | Chains (groups × copies) | Total Residues | Attempted GPUs |
+|--------|-----------|--------------------------|----------------|----------------|
+| 1DE4 | 1,014 | 3 groups × 3 = 9 chains | 3,042 | L40S 48GB, H100 80GB |
+| 1K5D | 803 | 3 groups × 4 = 12 chains | 3,212 | L40S 48GB, H100 80GB |
+| 1N2C | 1,302 | ~6 chains | 3,182 | L40S 48GB, H100 80GB |
+| 1WDW | 633 | 2 groups × 6 = 12 chains | 3,798 | L40S 48GB, H100 80GB |
+| 1ZM4 | 1,049 | 2 groups × 3 = 6 chains | 3,147 | L40S 48GB, H100 80GB |
+| 3BIW | 817 | 2 groups × 4 = 8 chains | 3,268 | L40S 48GB, H100 80GB |
+| 3L89 | 327 | 2 groups × 12 = 24 chains | 3,924 | L40S 48GB, H100 80GB |
+| 4GXU | 955 | 4 groups × 6 = 24 chains | 5,730 | L40S 48GB, H100 80GB |
+| 6EY6 | 453 | 2 groups × 8 = 16 chains | 3,624 | L40S 48GB, H100 80GB |
+
+**What would be needed**: Multi-GPU model parallelism (not supported by Boltz-1 v0.4.1)
+or GPUs with >160 GB VRAM (e.g., A100 160GB, H200 — not available on ACCRE).
+
+**Files updated**: `bm55_pdb_list.txt`, `af_dirlist.txt` (257 → 248 entries).
+AF predictions, cleaned PDBs, merged PDBs, and FASTA files removed from GitHub repo.
+
+### Revised Benchmark: 248 Targets
+
+| Category | Count |
+|----------|-------|
+| Total BM5.5 targets | 257 |
+| Excluded (Boltz OOM) | 9 |
+| **Active benchmark** | **248** |
+| AF predictions | 248/248 (100%) |
+| Boltz predictions | 248/248 (100%) |
+
+---
+
+### Disk Cleanup
+
+Deleted 31 GB of AF stderr logs (`benchmarking/logs/*.err`) — TensorFlow warning spam
+from completed jobs. Disk: 41 GB → 9.8 GB. Provides headroom for Rosetta outputs.
 
 ---
 
