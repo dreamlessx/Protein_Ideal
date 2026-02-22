@@ -34,7 +34,7 @@ Protein_Ideal excludes 11 targets where Boltz-1 OOMs (large symmetric complexes 
 | GPU | A6000 | A6000 |
 | Wall time | 48 h | 48 h |
 | Account | `csb_gpu_acc` | `csb_gpu_acc` |
-| Mail notifications | `BEGIN,END,FAIL` to `mudit.agarwal@vanderbilt.edu` | Not set |
+| Mail notifications | `BEGIN,END,FAIL` | Not set |
 | Separate stderr | Yes (separate .out and .err) | Yes (separate .out and .err) |
 
 ### AlphaFold Flags
