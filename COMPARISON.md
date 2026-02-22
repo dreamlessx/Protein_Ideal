@@ -341,21 +341,28 @@ The most significant methodological differences that could affect results:
    detects partial output (unrelaxed models present, no ranking_debug.json) and preserves
    them rather than deleting everything during a reduced_dbs retry.
 
-   **AMBER failures across pipelines (6 confirmed in Protein_Ideal):**
+   **Root cause (identified by Blue)**: Non-standard residues **X** (unknown amino acid)
+   and **Z** (ambiguous Glu/Gln) in FASTA sequences. AlphaFold predicts structure but
+   cannot place all atoms for these residues. AMBER's `_check_residues_are_well_defined()`
+   rejects the model during relaxation.
 
-   | Target | Protein_Relax_Pipeline | Protein_Ideal | Error |
-   |--------|----------------------|---------------|-------|
-   | 1ATN | AMBER fail | AMBER fail | `ValueError: residue with no atoms` |
-   | 1DFJ | AMBER fail | AMBER fail | AMBER crash |
-   | 1FC2 | AMBER fail | AMBER fail | AMBER crash |
-   | 1WEJ | AMBER fail | HHblits fail (pre-fallback); pending resubmit | TBD after job 9011401 |
-   | 2BTF | AMBER fail | AMBER fail | AMBER crash |
-   | 4CPA | AMBER fail | AMBER fail | AMBER crash |
-   | 5JMO | AMBER fail | AMBER fail | AMBER crash |
+   **Fix**: Trimmed X/Z residues from terminals of all 7 targets' FASTAs. Originals
+   backed up as `*.fasta.original`.
 
-   All AMBER-failed targets retain 5 unrelaxed models for Rosetta relaxation.
-   Pipeline reports 7 AMBER failures; Protein_Ideal confirms 6 of 7 (1WEJ was an
-   HHblits failure due to missing fallback — see item #13).
+   **AMBER failures across pipelines (all 7 resolved in Protein_Ideal):**
+
+   | Target | Protein_Relax_Pipeline | Protein_Ideal | Root Cause |
+   |--------|----------------------|---------------|------------|
+   | 1ATN | AMBER fail | **Resolved** | X residues in FASTA |
+   | 1DFJ | AMBER fail | **Resolved** | X residues in FASTA |
+   | 1FC2 | AMBER fail | **Resolved** | X/Z + internal XXK at C-terminus |
+   | 1WEJ | AMBER fail | **Resolved** | X residues in FASTA |
+   | 2BTF | AMBER fail | **Resolved** | Z residues in FASTA |
+   | 4CPA | AMBER fail | **Resolved** | X residues in FASTA |
+   | 5JMO | AMBER fail | **Resolved** | X residues in FASTA |
+
+   All 7 targets now have full 10 models (5 ranked + 5 unrelaxed) after FASTA fix.
+   Both pipelines match on all 7 AMBER targets.
 
 9. **Boltz GPU tiering**: Pipeline uses single L40S tier. Protein_Ideal stratifies by
    residue count:
@@ -402,14 +409,14 @@ The most significant methodological differences that could affect results:
     only runs on success — failed jobs leave intermediates behind. Pipeline operates on
     `/dors/meilerlab/` which has larger quotas.
 
-15. **Production status comparison** (as of Feb 2026):
+15. **Production status comparison** (as of Feb 22, 2026):
 
     | Milestone | Protein_Relax_Pipeline | Protein_Ideal |
     |-----------|----------------------|---------------|
-    | AF predictions | 257/257 complete | 226/257 + 31 retrying (job 9011401) |
+    | AF predictions | 257/257 complete | **257/257 complete** |
     | Boltz predictions | 257/257 submitted | 248/257 complete (9 OOM, AF-only) |
-    | AMBER failures | 7 targets | 6 confirmed + 1 pending (1WEJ) |
-    | Rosetta relaxation | Submitted (job 9011271) | Pending AF completion |
+    | AMBER failures | 7 targets (unresolved) | **0 (all 7 resolved via FASTA fix)** |
+    | Rosetta relaxation | Submitted (job 9011271) | Pending submission |
     | MolProbity | Pending | Pending |
 
 16. **Relaxation script architecture**: Pipeline uses a single `relax_predictions.slurm`

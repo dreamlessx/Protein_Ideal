@@ -28,10 +28,11 @@ with relaxation across 7 protocols (1 AMBER/OpenMM + 6 Rosetta).
 - **Working directory**: `protein_ideal_test/benchmarking/`
 - **Targets prepared**: 257
 - **Clean PDBs**: Done (257/257)
-- **AlphaFold**: 226/257 complete (88%). Job 8851183 done + 8855266 (highmem, done) + 8854324 (1MLC, done) + 9011401 (31 HHblits retries, pending)
-  - 220 targets: full 10 models (5 ranked + 5 unrelaxed)
-  - 6 AMBER failures (1ATN, 1DFJ, 1FC2, 2BTF, 4CPA, 5JMO): 5 unrelaxed models saved
-  - 31 targets: HHblits failure resubmitted with reduced_dbs fallback (job 9011401)
+- **AlphaFold**: **257/257 complete (100%)**
+  - All 257 targets: full 10 models (5 ranked + 5 unrelaxed)
+  - 7 AMBER failures (1ATN, 1DFJ, 1FC2, 1WEJ, 2BTF, 4CPA, 5JMO): **all resolved** via FASTA fix (trimmed X/Z non-standard residues)
+  - 31 HHblits retries: all completed with reduced_dbs fallback
+  - Jobs: 8851183 (main) + 8855266 (highmem) + 8854324 (1MLC) + 9011401 (HHblits retries) + 9174798/9174799 (AMBER fixes)
 - **Boltz-1**: 248/257 complete (96.5%). 9 targets OOM on all GPUs (>3000 residues, AF-only)
 - **AF config**: `--nouse_gpu_relax --models_to_relax=all` (AMBER relax all 5 models on CPU)
 - **AF output**: 10 models per target (5 AMBER-relaxed `ranked_*.pdb` + 5 unrelaxed `unrelaxed_model_*.pdb`)
@@ -124,10 +125,10 @@ during the bulk download (files already existed).
 | 2. Download FASTAs | Done | - | 249 RCSB + 2 obsolete replacements + 4 PDB-extracted + 2 pre-existing |
 | 3. Organize FASTAs | Done | - | 257 data/{ID}/sequence.fasta |
 | 4. Prepare Boltz input | Done | - | 257 data/{ID}/boltz_input.fasta |
-| 5. AlphaFold 2.3.2 | 226/257 (31 retrying) | 8851183 (done) + 8855266 (done) + 8854324 (done) + 9011401 (31 HHblits retries) | 6 AMBER failures, 31 HHblits failures resubmitted with fallback |
+| 5. AlphaFold 2.3.2 | **Done (257/257)** | 8851183 + 8855266 + 8854324 + 9011401 + 9174798 + 9174799 | All complete. 7 AMBER failures resolved via FASTA fix (X/Z residue trimming) |
 | 6. Boltz-1 v0.4.1 | Done (248/257) | - | 9 OOM targets (>3000 res), 2 targets with 1 model |
-| 7. Organize predictions | Waiting | - | Depends on Step 5 completing |
-| 8. Relaxation | Waiting | - | 7 protocols: 1 AMBER (done in Step 5) + 6 Rosetta x 5 replicates |
+| 7. Rosetta relaxation | Ready to submit | - | 6 protocols x 5 replicates on AF + Boltz + crystal structures |
+| 8. AMBER relaxation | **Done (in Step 5)** | - | All 257 targets have 5 ranked (AMBER-relaxed) PDBs |
 | 9. MolProbity validation | Waiting | - | Phenix + reduce |
 | 10. Collect metrics | Waiting | - | PyMOL RMSD + Rosetta energies |
 

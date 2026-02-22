@@ -545,10 +545,85 @@ Full audit confirmed Boltz outputs in `boltz_out_dir/boltz_results_boltz_input/p
 
 ---
 
+## 2026-02-21: AMBER Root Cause Fix and AF 257/257
+
+### AMBER Failure Root Cause (credit: Blue / Protein_Relax_Pipeline)
+
+Blue identified the root cause of all 7 AMBER failures across both pipelines:
+non-standard residues **X** (unknown amino acid) and **Z** (ambiguous Glu/Gln)
+in FASTA sequences. AlphaFold can predict structure for these residues but cannot
+place all atoms. AMBER's `_check_residues_are_well_defined()` then rejects the
+model during relaxation because the residue has missing atoms.
+
+**7 affected targets**: 1ATN, 1DFJ, 1FC2, 1WEJ, 2BTF, 4CPA, 5JMO
+
+**Fix applied**: Trimmed non-standard terminal residues (X/Z) from both
+`sequence.fasta` and `boltz_input.fasta` for all 7 targets. Originals backed
+up as `*.fasta.original`. Special case: 1FC2 chain A had internal `XXK` at
+C-terminus requiring regex removal.
+
+### AMBER Fix Re-runs Submitted
+
+| Job ID | Targets | Memory | Partition |
+|--------|---------|--------|-----------|
+| 9174798 | 1ATN (task 6), 1DFJ (task 18), 1FC2 (task 34) | 128 GB | highmem |
+| 9174799 | 1WEJ (task 109), 2BTF (task 130), 4CPA (task 206), 5JMO (task 233) | 64 GB | standard |
+
+Note: 1WEJ was previously classified as HHblits failure (pre-fallback script).
+With the FASTA fix and current script (with reduced_dbs fallback), it completed
+successfully — confirming it was an AMBER target all along, matching Blue's 7/7.
+
+---
+
+## 2026-02-22: AF 257/257 Complete, Data Backup
+
+### AF Final Status: 257/257 (100%)
+
+All AMBER fix re-runs completed successfully. **Zero AMBER failures remaining.**
+
+| Category | Count | Details |
+|----------|-------|---------|
+| Full 10 models (5 ranked + 5 unrelaxed) | 257 | All targets |
+| AMBER failures | 0 | All 7 fixed via FASTA trimming |
+| HHblits fallback used | ~31 targets | reduced_dbs fallback worked for all |
+
+The FASTA fix resolved all 7 AMBER failures. Every target now has 5 AMBER-relaxed
+`ranked_*.pdb` + 5 `unrelaxed_model_*.pdb` + `ranking_debug.json`.
+
+### Data Backup to GitHub
+
+All prediction data pushed to GitHub (Protein_Ideal repo) as disaster recovery:
+
+| Data Type | Files | Approx Size | Commit |
+|-----------|-------|-------------|--------|
+| Cleaned + merged PDBs | 514 | ~250 MB | `1ab25bb` |
+| AF predictions (all 257) | ~2,600 | ~1.5 GB | `81c186e` + `0c2cd44` + `a74edf7` |
+| Boltz predictions (248) | ~1,230 | ~750 MB | `14d4fc2` |
+
+Total: ~4,345 files, ~2.5 GB. Within GitHub's 5 GB limit (PDBs only, no MSAs/logs).
+
+### Boltz Status: 248/257 (96.5%)
+
+Unchanged. 9 targets permanently OOM on all available GPUs:
+
+| Target | Residues | Status |
+|--------|----------|--------|
+| 1DE4 | 3042 | OOM (L40S 48GB + H100 80GB) |
+| 1K5D | 3212 | OOM |
+| 1N2C | 3182 | OOM |
+| 1WDW | 3798 | OOM |
+| 1ZM4 | 3147 | OOM |
+| 3BIW | 3268 | OOM |
+| 3L89 | 3924 | OOM |
+| 4GXU | 5730 | OOM |
+| 6EY6 | 3624 | OOM |
+
+These exceed GPU VRAM even with 1 diffusion sample on H100 80GB. AF-only targets.
+
+---
+
 ## Pending Steps
-- **Step 7**: Organize AF + Boltz predictions (depends on Steps 5+6 completing)
-- **Step 8**: Submit relaxation (7 protocols x 5 replicates)
-  - 1 AMBER/OpenMM protocol (already computed during AF prediction as `ranked_*.pdb`)
-  - 6 Rosetta protocols: cart_beta, cart_ref15, dual_beta, dual_ref15, norm_beta, norm_ref15
-- **Step 9**: MolProbity validation
-- **Step 10**: Collect RMSD + energy metrics
+- **Step 7**: Submit Rosetta relaxation (6 protocols x 5 replicates on AF + Boltz + crystal)
+- **Step 8**: MolProbity + PoseBusters validation
+- **Step 9**: Collect RMSD + energy metrics
+- **Step 10**: Figures and analysis (Teal)
