@@ -504,7 +504,7 @@ for d in data/*/af_out/*/; do
     fi
 done
 echo "AlphaFold complete: $completed"
-# Expected: 246/246 (all active benchmark targets)
+# Expected: 257/257 (all active benchmark targets)
 
 # Verify a specific prediction
 ls data/1AK4/af_out/sequence/ranked_*.pdb | wc -l
@@ -589,10 +589,11 @@ for d in data/*/boltz_out_dir/; do
     fi
 done
 echo "Boltz complete: $completed"
-# Expected: 246/246 (all active benchmark targets, 5 models each)
-# 11 targets excluded from benchmark due to Boltz OOM:
-#   9 full OOM (>3000 total residues): 1DE4, 1K5D, 1N2C, 1WDW, 1ZM4, 3BIW, 3L89, 4GXU, 6EY6
-#   2 partial OOM (1/5 models only): 1GXD, 3EO1
+# Expected: 257/257 (all benchmark targets, 5 models each)
+# 11 targets use deduplicated FASTAs (unique chains only) to avoid Boltz OOM:
+#   Root cause: boltz_input.fasta listed all physical chain copies (quadratic attention scaling)
+#   Fix: boltz_input_dedup.fasta with unique sequences only (matches AF sequence.fasta)
+#   Targets: 1DE4, 1GXD, 1K5D, 1N2C, 1WDW, 1ZM4, 3BIW, 3EO1, 3L89, 4GXU, 6EY6
 
 # Verify a specific prediction
 find data/1AK4/boltz_out_dir -name '*.pdb' | wc -l
@@ -935,7 +936,7 @@ head -5 metrics.tsv
 | 4 | `prepare_boltz_fastas.py` | **PASS with caveat** | Unusual FASTA headers may default to chain A |
 | 5 | `af_array.slurm` | **PASS** | 64GB RAM; 128GB highmem variant for large complexes; 7 AMBER failures resolved via FASTA fix |
 | 5 | `af_array_highmem.slurm` | **PASS** | 128GB RAM for large multimer complexes |
-| 6 | `boltz_array.slurm` | **PASS** | MSA server needs internet from compute node; 246/246 complete |
+| 6 | `boltz_array.slurm` | **PASS** | MSA server needs internet from compute node; 257/257 complete |
 | 6 | `boltz_single.slurm` | **PASS** | Same MSA server caveat |
 | 7 | Organize predictions | Manual | No script — documented above |
 | 8 | `relax_predictions.slurm` | **PASS with caveat** | Crystal structures; 48h may timeout for large complexes |

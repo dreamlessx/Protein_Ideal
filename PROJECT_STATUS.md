@@ -12,9 +12,9 @@ with relaxation across 7 protocols (1 AMBER/OpenMM + 6 Rosetta).
 
 ## Dataset: PP Docking Benchmark 5.5
 
-- **Total complexes in BM5.5**: 257 (246 active, 11 excluded)
-- **FASTA sequences obtained**: 246/246 (11 OOM targets excluded)
-- **Boltz input prepared**: 246/246
+- **Total complexes in BM5.5**: 257 (all active — 11 OOM targets recovered via FASTA dedup)
+- **FASTA sequences obtained**: 257/257
+- **Boltz input prepared**: 257/257 (11 use deduplicated unique-chain FASTAs)
 
 ### Previous Runs (Original Pipeline)
 
@@ -28,11 +28,14 @@ with relaxation across 7 protocols (1 AMBER/OpenMM + 6 Rosetta).
 - **Working directory**: `protein_ideal_test/benchmarking/`
 - **Targets prepared**: 257
 - **Clean PDBs**: Done (257/257)
-- **Active benchmark**: **246 targets** (11 excluded — Boltz OOM on large symmetric complexes)
-  - 9 full OOM (>3000 total residues, 0/5 models): 1DE4, 1K5D, 1N2C, 1WDW, 1ZM4, 3BIW, 3L89, 4GXU, 6EY6
-  - 2 partial OOM (2200-3000 residues, 1/5 models): 1GXD, 3EO1
-- **AlphaFold**: **246/246 complete (100%)** — 5 ranked + 5 unrelaxed per target
-- **Boltz-1**: **246/246 complete (100%)** — 5 models per target
+- **Active benchmark**: **257 targets** (full BM5.5)
+  - 11 targets previously excluded for Boltz OOM — **ALL RECOVERED** via FASTA deduplication
+  - Root cause: `boltz_input.fasta` listed all physical chain copies (e.g., 24 chains, 3924 res)
+    but Boltz attention scales quadratically. Dedup to unique sequences (e.g., 2 chains, 327 res) fits easily on L40S 48GB
+  - AF FASTAs (`sequence.fasta`) already used unique chains — no AF re-runs needed
+  - Deduplicated crystal PDBs (`{ID}_dedup.pdb`) created with matching chain sets
+- **AlphaFold**: **257/257 complete (100%)** — 5 ranked + 5 unrelaxed per target
+- **Boltz-1**: **250/257 complete, 7 running** — dedup re-runs for 1DE4, 1GXD, 1K5D, 1N2C, 1WDW, 1ZM4, 6EY6
 - **AF config**: `--nouse_gpu_relax --models_to_relax=all` (AMBER relax all 5 models on CPU)
 - **AF output**: 10 models per target (5 AMBER-relaxed `ranked_*.pdb` + 5 unrelaxed `unrelaxed_model_*.pdb`)
 - **Database preset**: Full databases (HHblits + BFD + UniRef30), `reduced_dbs` fallback on HHblits failure
@@ -124,9 +127,9 @@ during the bulk download (files already existed).
 | 2. Download FASTAs | Done | - | 249 RCSB + 2 obsolete replacements + 4 PDB-extracted + 2 pre-existing |
 | 3. Organize FASTAs | Done | - | 257 data/{ID}/sequence.fasta |
 | 4. Prepare Boltz input | Done | - | 257 data/{ID}/boltz_input.fasta |
-| 5. AlphaFold 2.3.2 | **Done (246/246)** | 8851183 + 8855266 + 8854324 + 9011401 + 9174798 + 9174799 | All complete. 7 AMBER failures resolved via FASTA fix |
-| 6. Boltz-1 v0.4.1 | **Done (246/246)** | - | 11 OOM targets excluded (9 full + 2 partial). 5 models per target |
-| 7. Rosetta relaxation | **Running** | 9194317 (AI) + 9195061 (crystal) | 6 protocols x 5 reps. 2,460 AF + Boltz tasks, 246 crystal tasks |
+| 5. AlphaFold 2.3.2 | **Done (257/257)** | 8851183 + 8855266 + 8854324 + 9011401 + 9174798 + 9174799 | All complete. 7 AMBER failures resolved via FASTA fix |
+| 6. Boltz-1 v0.4.1 | **250/257 done, 7 running** | 9304567 + 9304593 | 11 OOM targets recovered via FASTA dedup. 5 models per target |
+| 7. Rosetta relaxation | **Running** | 9194317 (AI) + 9195061 (crystal) + 9304585 + 9304586 | 6 protocols x 5 reps. Failed tasks resubmitted |
 | 8. AMBER relaxation | **Done (in Step 5)** | - | All 246 targets have 5 ranked (AMBER-relaxed) PDBs |
 | 9. MolProbity validation | Waiting on Rosetta | - | Phenix + reduce |
 | 10. Collect metrics | Waiting on Rosetta | - | PyMOL RMSD + Rosetta energies |
@@ -196,7 +199,7 @@ during the bulk download (files already existed).
 
 ## Validation Pipeline (TODO)
 
-- [ ] MolProbity validation on full 246-target run (~80,000 structures)
+- [ ] MolProbity validation on full 257-target run
 - [ ] PoseBusters validation
 - [ ] Statistical analysis and figures
 - [ ] Manuscript preparation
