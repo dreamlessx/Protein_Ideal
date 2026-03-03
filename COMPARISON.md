@@ -11,17 +11,21 @@ All values verified against actual SLURM scripts and READMEs in both repositorie
 |---|---|---|
 | Dataset | BM5.5 full | BM5.5 full |
 | Total BM5.5 targets | 257 | 257 |
-| Active benchmark | 257 | **246** (11 excluded: Boltz OOM on large symmetric complexes) |
-| Rigid-body | 162 | ~155 (after exclusions) |
-| Medium | 60 | ~57 (after exclusions) |
-| Difficult | 35 | ~34 (after exclusions) |
+| Active benchmark | 257 | **257** (all targets active — 119 use deduplicated unique-chain FASTAs) |
+| Rigid-body | 162 | 162 |
+| Medium | 60 | 60 |
+| Difficult | 35 | 35 |
 | Non-standard IDs | BAAD, BOYV, BP57, CP57 | BAAD, BOYV, BP57, CP57 (sequences extracted from ATOM records) |
 | Obsolete PDBs | Unknown | 1A2K (replaced by 5BXQ), 3RVW (replaced by 5VPG) |
 
 Both pipelines target the full BM5.5 benchmark (257 complexes). Pipeline originally had
 15 extra non-BM5.5 entries from the benchmark5.5.tgz archive which were removed.
-Protein_Ideal excludes 11 targets where Boltz-1 OOMs (large symmetric complexes with
->2,200 total residues across all physical chains), reducing the active benchmark to 246.
+
+**FASTA Deduplication**: 119 homo-multimeric targets have duplicate chain copies in their
+biological assembly. All FASTAs are deduplicated to unique sequences only, ensuring uniform
+chain sets across AF predictions, Boltz predictions, and crystal structures. This resolved
+all 11 Boltz OOM failures (the original `boltz_input.fasta` listed all physical chain copies,
+causing quadratic attention memory scaling). Crystal PDBs are filtered to matching chains.
 
 ## AlphaFold 2.3.2 Configuration
 
