@@ -4,6 +4,15 @@ A complete, step-by-step guide to reproducing the protein-protein complex struct
 
 This document traces every script, validates each step, and provides verification checkpoints so you can confirm correctness at each stage.
 
+> **FASTA Strategy Note**: This pipeline uses **crystal-derived sequences** extracted from
+> BM5.5 bound-structure PDB ATOM records, **not** full-length UniProt canonical sequences from
+> RCSB. UniProt FASTAs include residues not resolved in the crystal structure (disordered termini,
+> signal peptides, etc.), which creates mismatches for RMSD evaluation. Crystal-derived sequences
+> ensure predictions cover exactly the experimentally resolved region. For some targets the
+> difference is substantial (e.g., 6A0Z: 705 crystal vs 989 UniProt residues). Homo-multimeric
+> targets (119/257) are further deduplicated to unique sequences only. See
+> [PROJECT_STATUS.md](PROJECT_STATUS.md) for full details.
+
 ---
 
 ## Table of Contents
@@ -226,6 +235,12 @@ awk '/^ATOM/{print substr($0,22,1)}' cleaned/1AK4.pdb | sort -u
 - RCSB FASTA includes all chains with proper headers
 - Headers contain chain IDs needed for Boltz format conversion
 - More reliable than parsing PDB ATOM records for sequence
+
+> **UPDATE**: This pipeline now uses **crystal-derived sequences** extracted from BM5.5
+> bound-structure PDB ATOM records instead of RCSB UniProt FASTAs. The RCSB download step
+> is retained for reference, but all prediction FASTAs (`sequence.fasta`, `boltz_input.fasta`)
+> have been replaced with crystal-derived versions. Original RCSB FASTAs are backed up as
+> `sequence.fasta.pre_blue_match`. See [PROJECT_STATUS.md](PROJECT_STATUS.md) for rationale.
 
 ### Run
 

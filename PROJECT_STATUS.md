@@ -33,14 +33,109 @@ with relaxation across 7 protocols (1 AMBER/OpenMM + 6 Rosetta).
   - All FASTAs (AF + Boltz), AF predictions, and crystal structures use identical chain sets per target
   - Root cause of original 11 OOM failures: `boltz_input.fasta` listed all physical chain copies
     (quadratic attention scaling). Dedup to unique sequences resolved all OOMs on L40S 48GB
-- **AlphaFold**: **257/257 complete (100%)** — 5 ranked + 5 unrelaxed per target
-- **Boltz-1**: **149/257 complete, 108 re-running** with deduplicated FASTAs (job 9304609)
+- **FASTA strategy**: Crystal-derived sequences (not UniProt full-length) — see [FASTA Strategy](#fasta-strategy-crystal-derived-vs-uniprot-full-length)
+- **AlphaFold**: **257/257 complete (100%)** — 5 ranked + 5 unrelaxed per target, re-run with crystal-derived FASTAs
+- **Boltz-1**: **149/257 complete, 108 re-running** with deduplicated crystal-derived FASTAs (job 9304609)
 - **AF config**: `--nouse_gpu_relax --models_to_relax=all` (AMBER relax all 5 models on CPU)
 - **AF output**: 10 models per target (5 AMBER-relaxed `ranked_*.pdb` + 5 unrelaxed `unrelaxed_model_*.pdb`)
 - **Database preset**: Full databases (HHblits + BFD + UniRef30), `reduced_dbs` fallback on HHblits failure
 - **Input verification**: Green's FASTAs verified against authoritative set — 0 sequence mismatches (251/251)
 - **DNA/RNA policy**: DNA/RNA chains excluded from all prediction FASTAs (protein-only). Fixed 3P57 and 1H9D.
 - **Disk usage**: ~10 GB (cleaned 31 GB of AF stderr logs; under 50 GB hard limit)
+
+## FASTA Strategy: Crystal-Derived vs UniProt Full-Length
+
+### The Problem
+
+RCSB FASTA downloads provide **full-length UniProt canonical sequences**, which include residues
+not resolved in the crystal structure — disordered N/C-termini, flexible loops, signal peptides,
+and transmembrane domains that were removed for crystallization. These extra residues create
+mismatches between the prediction input and the crystal reference used for RMSD evaluation.
+
+When AlphaFold or Boltz predicts a structure from the full-length UniProt sequence, the resulting
+model contains regions that have no counterpart in the crystal structure. RMSD calculations then
+compare apples to oranges: the predicted structure covers residues 1–965 while the crystal only
+resolves residues 217–965, leaving 216 residues in the prediction with no ground truth.
+
+### Examples: UniProt vs Crystal-Derived Sequences
+
+| Target | Chain | Crystal (resolved) | UniProt (canonical) | Extra residues | Description |
+|--------|-------|--------------------|---------------------|----------------|-------------|
+| **6A0Z** | A | 270 aa | 551 aa | **+281** | Influenza hemagglutinin (signal peptide + transmembrane removed) |
+| **1HE8** | A | 749 aa | 965 aa | **+216** | PI3K gamma (N-terminal domain absent from crystal) |
+| **1MQ8** | A | 184 aa | 291 aa | **+107** | ICAM-1 (only 2 of 5 Ig domains crystallized) |
+| **1AZS** | C | 339 aa | 402 aa | **+63** | Gs-alpha (disordered termini removed) |
+| **1ACB** | E | 238 aa | 245 aa | **+7** | Alpha-chymotrypsin (minor zymogen cleavage artifact) |
+| **1ACB** | I | 63 aa | 70 aa | **+7** | Eglin C (N-terminal residues disordered) |
+| **1BUH** | A | 287 aa | 298 aa | **+11** | CDK2 (C-terminal extension unresolved) |
+| **1BUH** | B | 70 aa | 79 aa | **+9** | CksHs1 (N-terminal Met + disordered tail) |
+
+**Worst case: 6A0Z** — The UniProt hemagglutinin sequence is 551 residues (full precursor including
+signal peptide and transmembrane anchor), but only 270 residues are resolved in the crystal. Predicting
+the full-length sequence would waste compute on 281 residues that cannot be evaluated and would distort
+RMSD by including large disordered regions.
+
+### Why Crystal-Derived Sequences
+
+1. **Clean RMSD comparison**: Predictions cover exactly the resolved region of the crystal structure.
+   Every predicted residue has a ground-truth coordinate for evaluation. No alignment ambiguity.
+
+2. **Smaller input = faster predictions, less memory**: For 6A0Z, crystal-derived input is
+   705 residues vs 989 UniProt residues. Boltz attention scales O(N^2), so this reduces memory
+   by ~50%. Across 257 targets, crystal-derived sequences save significant GPU-hours.
+
+3. **Standard practice in structural biology benchmarking**: CASP, CAMEO, and the original BM5.5
+   benchmark all evaluate against the experimentally resolved region. Including unresolved
+   residues would be methodologically incorrect.
+
+4. **Consistent with BM5.5 benchmark design**: The bound-structure PDB files in BM5.5 contain
+   only the crystallographically resolved chains. Our FASTAs now match these structures exactly.
+
+### Chain Deduplication
+
+For homo-multimers, only unique sequences are kept in prediction FASTAs:
+
+- **119 targets** are homo-multimeric (have duplicate chain copies in the biological assembly)
+- Example: A homodimer with chains A, B (identical) produces a single chain A in the FASTA
+- This reduces Boltz attention memory from O(N^2) to O((N/k)^2) where k is the copy number
+- Example: 3L89 has 24 chains / 3,924 residues but only 2 unique sequences / 327 residues
+  - Without dedup: Boltz OOM on H100 80GB
+  - With dedup: Completes in minutes on L40S 48GB
+- All 11 original Boltz OOM failures were resolved by this deduplication
+
+### Non-BM5.5 Chains Removed
+
+7 targets had extra chains (peptides in MHC grooves, inhibitors, ternary complex partners) that
+are not part of the BM5.5 docking pair. These were removed for consistency with the benchmark
+definition, which specifies exactly two binding partners (receptor + ligand) per target.
+
+### Chain Count Corrections
+
+13 targets had chain count corrections where the original deduplication was too aggressive
+(removed chains that appeared identical but were actually distinct binding partners with
+slightly different conformations or were required for the docking pair definition).
+
+### Uniformity Verification
+
+All 257 targets verified: **AF FASTA == Boltz FASTA == Crystal PDB** (chain counts and
+sequences match across all three inputs). Zero mismatches. This ensures that RMSD comparisons
+are valid and that all predictors see exactly the same input.
+
+### Implementation
+
+Crystal-derived sequences were extracted from the ATOM records of BM5.5 bound-structure PDB
+files using 3-letter to 1-letter amino acid conversion (including MSE->M, HSD/HSE/HSP->H).
+The original UniProt-derived FASTAs from RCSB are preserved as `sequence.fasta.pre_blue_match`
+backups in each target directory. All 257 targets have backups.
+
+### Status
+
+AF and Boltz are being **re-run with crystal-derived FASTAs**:
+- AF: 257/257 complete with crystal-derived FASTAs
+- Boltz: 149/257 complete, 108 re-running with deduplicated crystal-derived FASTAs (job 9304609)
+- Rosetta relaxation will be re-run after Boltz completes
+
+---
 
 ## FASTA Acquisition Notes
 

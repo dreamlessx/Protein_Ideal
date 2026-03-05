@@ -291,40 +291,73 @@ Applied to: crystal structures, AF unrelaxed predictions, and Boltz predictions.
 
 | | Protein_Relax_Pipeline | Protein_Ideal |
 |---|---|---|
-| Source | RCSB download | RCSB download + manual fixes |
+| Source | RCSB download (UniProt full-length) | **Crystal-derived** (extracted from bound PDB ATOM records) |
+| Sequence coverage | Full-length UniProt canonical | Resolved region only (matches crystal structure) |
 | Obsolete PDB handling | Unknown | Documented: 1A2K->5BXQ, 3RVW->5VPG |
 | Non-standard IDs | BAAD, BOYV, BP57, CP57 documented | BAAD, BOYV, BP57, CP57 extracted from ATOM records |
 | Python compatibility | Requires Python 3.10+ (`str | None`) | Fixed for Python 3.9 (`from __future__ import annotations`) |
+| Chain deduplication | Not applied | 119 homo-multimers deduplicated to unique sequences |
+| Non-BM5.5 chain removal | Unknown | 7 targets had extra chains removed |
+| Uniformity verification | Not documented | AF == Boltz == Crystal verified for all 257 targets |
+
+### Crystal-Derived vs UniProt Full-Length FASTAs (Protein_Ideal)
+
+Protein_Ideal switched from RCSB-downloaded UniProt full-length FASTAs to crystal-derived
+sequences extracted from BM5.5 bound-structure PDB ATOM records. This is a **critical
+methodological difference** between the two pipelines.
+
+**Why crystal-derived sequences are necessary:**
+- UniProt canonical sequences include residues not resolved in the crystal (disordered termini,
+  signal peptides, transmembrane domains). These extra residues create RMSD evaluation artifacts.
+- Crystal-derived sequences cover exactly the experimentally resolved region, enabling clean
+  RMSD comparison without alignment ambiguity.
+- Smaller inputs reduce prediction runtime and GPU memory (Boltz attention scales O(N^2)).
+
+**Impact on comparisons:**
+- Protein_Relax_Pipeline predictions use UniProt full-length sequences; Protein_Ideal uses
+  crystal-derived sequences. Predictions are **not directly comparable** at the sequence level.
+- RMSD comparisons between pipelines require careful alignment to the common resolved region.
+- For targets with large UniProt-vs-crystal differences (e.g., 6A0Z: 989 vs 705 residues,
+  1HE8: 1131 vs 915 residues), predictions may differ substantially due to different input coverage.
+
+**Re-run status:** AF and Boltz predictions are being re-run with crystal-derived FASTAs.
+Original UniProt-based FASTAs are backed up as `sequence.fasta.pre_blue_match`.
 
 ## Summary of Impact
 
 The most significant methodological differences that could affect results:
 
-1. **Monomer vs Multimer**: Pipeline runs BOTH presets for every target (up to 20 AF
+1. **FASTA source (NEW)**: Pipeline uses UniProt full-length sequences from RCSB; Protein_Ideal
+   uses crystal-derived sequences from BM5.5 bound-structure ATOM records. This ensures
+   Protein_Ideal predictions cover exactly the resolved region for clean RMSD evaluation.
+   For some targets (e.g., 6A0Z, 1HE8), the difference exceeds 200 residues. This is the
+   most significant methodological difference between the two pipelines.
+
+2. **Monomer vs Multimer**: Pipeline runs BOTH presets for every target (up to 20 AF
    models). Protein_Ideal auto-detects and runs only the appropriate preset (10 models).
    This is the largest structural difference between the two approaches.
 
-2. **AMBER relaxation compute**: Both pipelines AMBER-relax all 5 models via OpenMM
+3. **AMBER relaxation compute**: Both pipelines AMBER-relax all 5 models via OpenMM
    (ff14SB). Pipeline uses GPU relax; Protein_Ideal uses CPU relax. Both save unrelaxed
    models as baselines. GPU vs CPU relax produces numerically equivalent results.
 
-3. **Memory strategy**: Pipeline requests 6 GB system RAM in scripts and relies on
+4. **Memory strategy**: Pipeline requests 6 GB system RAM in scripts and relies on
    TensorFlow unified memory overcommit (GPU overcommit). Protein_Ideal allocates
    64-128 GB system RAM without unified memory settings.
 
-4. **Rosetta version**: 3.14 vs 3.15 may produce slightly different energy landscapes
+5. **Rosetta version**: 3.14 vs 3.15 may produce slightly different energy landscapes
    and score function behavior.
 
-5. **AF output organization**: Pipeline separates relaxed and unrelaxed into distinct
+6. **AF output organization**: Pipeline separates relaxed and unrelaxed into distinct
    directories (`af_out_relaxed/`, `af_out_unrelaxed/`). Protein_Ideal keeps both in
    a single `af_out/sequence/` directory.
 
-6. **Database preset**: Both pipelines use `full_dbs` as primary with `reduced_dbs` fallback
+7. **Database preset**: Both pipelines use `full_dbs` as primary with `reduced_dbs` fallback
    on HHblits failure. Confirmed HHblits failures on antibody/immunoglobulin targets that hit
    titin-like sequences in BFD (32763 residue limit). Pipeline: built-in from start.
    Protein_Ideal: added after 1IRA failure.
 
-7. **HHblits fallback mechanism**: Both pipelines wrap the AF call in a retry function.
+8. **HHblits fallback mechanism**: Both pipelines wrap the AF call in a retry function.
    On failure, the script checks for existing `unrelaxed_model_*.pdb` files. If present,
    AMBER failed but prediction succeeded — unrelaxed models are preserved. If absent,
    HHblits failed — output is cleaned and AF retries with `--db_preset=reduced_dbs` +
@@ -342,7 +375,7 @@ The most significant methodological differences that could affect results:
    **Resolution**: Cleaned failed `af_out/` directories and resubmitted as job 9011401
    with the current script containing the fallback logic.
 
-8. **AMBER crash recovery**: Both pipelines run AMBER on all 5 models
+9. **AMBER crash recovery**: Both pipelines run AMBER on all 5 models
    (`--models_to_relax=all`). If AMBER crashes (e.g., `ValueError: residue with
    no atoms`), unrelaxed models survive as baseline for Rosetta relaxation. The script
    detects partial output (unrelaxed models present, no ranking_debug.json) and preserves
@@ -371,7 +404,7 @@ The most significant methodological differences that could affect results:
    All 7 targets now have full 10 models (5 ranked + 5 unrelaxed) after FASTA fix.
    Both pipelines match on all 7 AMBER targets.
 
-9. **Boltz GPU tiering**: Pipeline uses single L40S tier. Protein_Ideal stratifies by
+10. **Boltz GPU tiering**: Pipeline uses single L40S tier. Protein_Ideal stratifies by
    residue count:
 
    | Tier | GPU | Samples | Residue Range | Targets | Result |
@@ -389,25 +422,25 @@ The most significant methodological differences that could affect results:
    Excluded (full OOM): 1DE4, 1K5D, 1N2C, 1WDW, 1ZM4, 3BIW, 3L89, 4GXU, 6EY6.
    Excluded (partial OOM): 1GXD, 3EO1.
 
-10. **DNA/RNA exclusion**: Both pipelines exclude DNA/RNA chains from prediction FASTAs.
+11. **DNA/RNA exclusion**: Both pipelines exclude DNA/RNA chains from prediction FASTAs.
     BM5.5 is a protein-protein benchmark; neither AF nor Boltz supports nucleic acids.
     Protein_Ideal audited all 257 targets and removed DNA from 3P57 (2 DNA strands) and
     1H9D (2 DNA strands). BP57/CP57 already protein-only.
 
-11. **Input verification**: Protein_Ideal FASTAs verified against dreamlessx's
+12. **Input verification**: Protein_Ideal FASTAs verified against dreamlessx's
     authoritative set (265 files in Protein_Relax_Pipeline `fasta/`). Of 251 overlapping
     targets: 48 byte-identical, 203 same sequences with different chain order, 0 truly
     different. Chain order difference: Protein_Ideal uses BM5.5 receptor-first order;
     Pipeline uses RCSB chain-ID order. Both are valid; difference is cosmetic.
 
-12. **Chain ordering effect on AF-Multimer**: AF-Multimer processes chains in FASTA
+13. **Chain ordering effect on AF-Multimer**: AF-Multimer processes chains in FASTA
     order. The reversed chain ordering between pipelines (203/251 targets) may produce
     slightly different MSA pairing and template matching. For relaxation analysis, this is
     irrelevant (MolProbity, clashscore, Ramachandran are chain-order-independent). For
     DockQ comparison, proper alignment handles this. If both pipelines produce consistent
     relaxation results despite different chain order, this demonstrates robustness.
 
-13. **SLURM script versioning**: Protein_Ideal's main AF job (8851183, 257 tasks) was
+14. **SLURM script versioning**: Protein_Ideal's main AF job (8851183, 257 tasks) was
     submitted before the `reduced_dbs` fallback was added to `af_array.slurm`. SLURM
     snapshots the script at submission time, so 31 targets that hit HHblits failures
     had no fallback available and failed outright. These were resubmitted as job 9011401
@@ -415,14 +448,14 @@ The most significant methodological differences that could affect results:
     was built in from the start. **Lesson**: always verify the submitted script version
     matches the intended logic before launching large array jobs.
 
-14. **Disk management**: Protein_Ideal operates under a 50 GB hard limit / 30 GB soft
+15. **Disk management**: Protein_Ideal operates under a 50 GB hard limit / 30 GB soft
     target on ACCRE. AF intermediate files (MSAs, pickles) can consume ~1 GB per target.
     After 226 targets completed, disk hit 66 GB before emergency cleanup (MSAs, pickles,
     failed af_out dirs) brought it back to 30 GB. The cleanup script in `af_array.slurm`
     only runs on success — failed jobs leave intermediates behind. Pipeline operates on
     `/dors/meilerlab/` which has larger quotas.
 
-15. **Production status comparison** (as of Feb 22, 2026):
+16. **Production status comparison** (as of Feb 22, 2026):
 
     | Milestone | Protein_Relax_Pipeline | Protein_Ideal |
     |-----------|----------------------|---------------|
@@ -433,7 +466,7 @@ The most significant methodological differences that could affect results:
     | Rosetta relaxation | Submitted (job 9011271) | Pending submission |
     | MolProbity | Pending | Pending |
 
-16. **Relaxation script architecture**: Pipeline uses a single `relax_predictions.slurm`
+17. **Relaxation script architecture**: Pipeline uses a single `relax_predictions.slurm`
     that iterates over PDB directories (crystal structures only). Protein_Ideal has three
     complementary scripts:
     - `relax_predictions.slurm` — crystal structure relaxation (per-directory indexing)
