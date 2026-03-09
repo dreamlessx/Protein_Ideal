@@ -425,6 +425,7 @@ done
 - AMBER relaxation treated as 7th relaxation protocol (alongside 6 Rosetta protocols)
 - Skip completed targets (completion guard checks for `ranking_debug.json`)
 - Clean up intermediates (MSAs, pickles) to manage disk usage
+- **Status**: 256/257 complete (re-run with crystal-derived FASTAs, job 9324390). 1KTZ resubmitted (job 9370573) due to TypeError in AF 2.3.2 `templates.py` during template processing; retried with `reduced_dbs`
 
 ### Run (Array Job)
 
@@ -539,6 +540,7 @@ cat data/1AK4/af_out/sequence/ranking_debug.json | python3 -m json.tool | head -
 - Run Boltz-1 v0.4.1 structure prediction
 - Use MSA server for fast multiple sequence alignment
 - Produce 5 diffusion samples per target
+- **Status**: 257/257 complete (re-run with crystal-derived FASTAs, job 9324391, zero failures)
 
 ### Run (Array Job)
 
@@ -951,7 +953,7 @@ head -5 metrics.tsv
 | 4 | `prepare_boltz_fastas.py` | **PASS with caveat** | Unusual FASTA headers may default to chain A |
 | 5 | `af_array.slurm` | **PASS** | 64GB RAM; 128GB highmem variant for large complexes; 7 AMBER failures resolved via FASTA fix |
 | 5 | `af_array_highmem.slurm` | **PASS** | 128GB RAM for large multimer complexes |
-| 6 | `boltz_array.slurm` | **PASS** | MSA server needs internet from compute node; 257/257 complete |
+| 6 | `boltz_array.slurm` | **PASS** | MSA server needs internet from compute node; 257/257 complete (re-run with crystal-derived FASTAs) |
 | 6 | `boltz_single.slurm` | **PASS** | Same MSA server caveat |
 | 7 | Organize predictions | Manual | No script — documented above |
 | 8 | `relax_predictions.slurm` | **PASS with caveat** | Crystal structures; 48h may timeout for large complexes |

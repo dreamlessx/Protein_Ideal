@@ -320,8 +320,10 @@ methodological difference** between the two pipelines.
 - For targets with large UniProt-vs-crystal differences (e.g., 6A0Z: 989 vs 705 residues,
   1HE8: 1131 vs 915 residues), predictions may differ substantially due to different input coverage.
 
-**Re-run status:** AF and Boltz predictions are being re-run with crystal-derived FASTAs.
-Original UniProt-based FASTAs are backed up as `sequence.fasta.pre_blue_match`.
+**Re-run status:** AF re-run complete (256/257, 1KTZ retrying due to template bug). Boltz re-run
+complete (257/257, zero failures). Old UniProt-based predictions backed up as `af_out_old_uniprot/`
+and `boltz_out_dir_old_uniprot/`. Original FASTAs backed up as `sequence.fasta.pre_blue_match`.
+Rosetta relaxation just submitted (jobs 9370594, 9370595, 9370596).
 
 ## Summary of Impact
 
@@ -455,16 +457,16 @@ The most significant methodological differences that could affect results:
     only runs on success — failed jobs leave intermediates behind. Pipeline operates on
     `/dors/meilerlab/` which has larger quotas.
 
-16. **Production status comparison** (as of Feb 22, 2026):
+16. **Production status comparison** (as of March 8, 2026):
 
     | Milestone | Protein_Relax_Pipeline | Protein_Ideal |
     |-----------|----------------------|---------------|
-    | Active benchmark targets | 257 | **246** (11 excluded: Boltz OOM) |
-    | AF predictions | 257/257 complete | **246/246 complete** (5 models each) |
-    | Boltz predictions | 257/257 submitted | **246/246 complete** (5 models each) |
+    | Active benchmark targets | 257 | **257** (all targets active, crystal-derived FASTAs) |
+    | AF predictions | 257/257 complete | **256/257 complete** (re-run with crystal-derived FASTAs, job 9324390; 1KTZ retrying, job 9370573) |
+    | Boltz predictions | 257/257 submitted | **257/257 complete** (re-run with crystal-derived FASTAs, job 9324391, zero failures) |
     | AMBER failures | 7 targets (unresolved) | **0 (all 7 resolved via FASTA fix)** |
-    | Rosetta relaxation | Submitted (job 9011271) | Pending submission |
-    | MolProbity | Pending | Pending |
+    | Rosetta relaxation | Submitted (job 9011271) | **Just submitted** (jobs 9370594/9370595/9370596, 6 protocols x 5 replicates) |
+    | MolProbity | Pending | Pending (waiting on Rosetta) |
 
 17. **Relaxation script architecture**: Pipeline uses a single `relax_predictions.slurm`
     that iterates over PDB directories (crystal structures only). Protein_Ideal has three

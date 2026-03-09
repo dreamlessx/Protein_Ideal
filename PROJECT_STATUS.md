@@ -34,8 +34,9 @@ with relaxation across 7 protocols (1 AMBER/OpenMM + 6 Rosetta).
   - Root cause of original 11 OOM failures: `boltz_input.fasta` listed all physical chain copies
     (quadratic attention scaling). Dedup to unique sequences resolved all OOMs on L40S 48GB
 - **FASTA strategy**: Crystal-derived sequences (not UniProt full-length) — see [FASTA Strategy](#fasta-strategy-crystal-derived-vs-uniprot-full-length)
-- **AlphaFold**: **257/257 complete (100%)** — 5 ranked + 5 unrelaxed per target, re-run with crystal-derived FASTAs
-- **Boltz-1**: **149/257 complete, 108 re-running** with deduplicated crystal-derived FASTAs (job 9304609)
+- **AlphaFold**: **256/257 complete** — 5 ranked + 5 unrelaxed per target, re-run with crystal-derived FASTAs (job 9324390). 1KTZ resubmitted with `reduced_dbs` (job 9370573) due to template processing bug (TypeError in AF 2.3.2 `templates.py`)
+- **Boltz-1**: **257/257 complete (100%)** — re-run with deduplicated crystal-derived FASTAs (job 9324391), zero failures
+- **Old predictions**: backed up as `af_out_old_uniprot/` and `boltz_out_dir_old_uniprot/`
 - **AF config**: `--nouse_gpu_relax --models_to_relax=all` (AMBER relax all 5 models on CPU)
 - **AF output**: 10 models per target (5 AMBER-relaxed `ranked_*.pdb` + 5 unrelaxed `unrelaxed_model_*.pdb`)
 - **Database preset**: Full databases (HHblits + BFD + UniRef30), `reduced_dbs` fallback on HHblits failure
@@ -130,10 +131,11 @@ backups in each target directory. All 257 targets have backups.
 
 ### Status
 
-AF and Boltz are being **re-run with crystal-derived FASTAs**:
-- AF: 257/257 complete with crystal-derived FASTAs
-- Boltz: 149/257 complete, 108 re-running with deduplicated crystal-derived FASTAs (job 9304609)
-- Rosetta relaxation will be re-run after Boltz completes
+AF and Boltz **re-runs with crystal-derived FASTAs** are complete:
+- AF: 256/257 complete (job 9324390). 1KTZ resubmitted (job 9370573) — TypeError in AF 2.3.2 `templates.py` during template processing; retried with `reduced_dbs`
+- Boltz: 257/257 complete (job 9324391), zero failures
+- Old UniProt-based predictions backed up as `af_out_old_uniprot/` and `boltz_out_dir_old_uniprot/`
+- Rosetta relaxation: **just submitted** — jobs 9370594 (AF), 9370595 (Boltz), 9370596 (crystal). 6 protocols x 5 replicates, account `p_csb_meiler`, batch partition
 
 ---
 
@@ -221,9 +223,9 @@ during the bulk download (files already existed).
 | 2. Download FASTAs | Done | - | 249 RCSB + 2 obsolete replacements + 4 PDB-extracted + 2 pre-existing |
 | 3. Organize FASTAs | Done | - | 257 data/{ID}/sequence.fasta |
 | 4. Prepare Boltz input | Done | - | 257 data/{ID}/boltz_input.fasta |
-| 5. AlphaFold 2.3.2 | **Done (257/257)** | 8851183 + 8855266 + 8854324 + 9011401 + 9174798 + 9174799 | All complete. 7 AMBER failures resolved via FASTA fix |
-| 6. Boltz-1 v0.4.1 | **149/257 done, 108 re-running** | 9304609 | 119 targets use dedup FASTAs (unique chains). All OOMs resolved |
-| 7. Rosetta relaxation | **Running (partial)** | 9194317 (AI) + 9195061 (crystal) + 9304585 + 9304586 | Needs re-run after Boltz dedup completes for 108 targets |
+| 5. AlphaFold 2.3.2 | **256/257 done** | 9324390 + 9370573 (1KTZ retry) | Re-run with crystal-derived FASTAs. 1KTZ retrying (template bug) |
+| 6. Boltz-1 v0.4.1 | **Done (257/257)** | 9324391 | Re-run with dedup crystal-derived FASTAs. Zero failures |
+| 7. Rosetta relaxation | **Just submitted** | 9370594 (AF) + 9370595 (Boltz) + 9370596 (crystal) | 6 protocols x 5 replicates, account p_csb_meiler, batch partition |
 | 8. AMBER relaxation | **Done (in Step 5)** | - | All 246 targets have 5 ranked (AMBER-relaxed) PDBs |
 | 9. MolProbity validation | Waiting on Rosetta | - | Phenix + reduce |
 | 10. Collect metrics | Waiting on Rosetta | - | PyMOL RMSD + Rosetta energies |
