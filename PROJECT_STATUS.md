@@ -36,7 +36,7 @@ verifies Blue's protocol with matched parameters.
   - Root cause of original 11 OOM failures: `boltz_input.fasta` listed all physical chain copies
     (quadratic attention scaling). Dedup to unique sequences resolved all OOMs on L40S 48GB
 - **FASTA strategy**: Crystal-derived sequences (not UniProt full-length) — see [FASTA Strategy](#fasta-strategy-crystal-derived-vs-uniprot-full-length)
-- **AlphaFold relaxed (built-in AMBER)**: **256/257 complete** — 5 ranked (AMBER-relaxed) per target. 1KTZ re-running with template workaround (`max_template_date=1900-01-01`), job 9372015
+- **AlphaFold relaxed (built-in AMBER)**: **256/257 complete** — 5 ranked (AMBER-relaxed) per target. 1KTZ re-running with template workaround (`max_template_date=1900-01-01`), job 9373163 (A6000 required — L40S incompatible with AF2.3.2 CUDA/JAX)
 - **AlphaFold unrelaxed**: **256/257 complete** — 5 unrelaxed per target (same AF run as relaxed)
 - **Boltz-1**: **257/257 COMPLETE** — re-run with deduplicated crystal-derived FASTAs (job 9324391), zero failures
 - **Crystal structures**: **257/257 COMPLETE** — Rosetta-cleaned from BM5.5 bound PDBs
@@ -51,15 +51,16 @@ verifies Blue's protocol with matched parameters.
 
 ## Standalone AMBER Relaxation (GPU)
 
-- **Job 9372017** (`green_amber`): array 1-257, 10 concurrent, GPU partition (A6000)
+- **Job 9372421** (`green_amber`): array 1-257, 10 concurrent, GPU partition (L40S)
+- **Progress**: **~235/257 complete**, 0 failures
 - **Inputs**: AF unrelaxed (5 models) + Boltz (5 models) = 10 models per target
 - **Purpose**: test standalone AMBER relaxation vs AF's built-in AMBER relaxation
 - **AMBER parameters**: `max_iterations=0`, `tolerance=2.39`, `stiffness=10.0`, `max_outer_iterations=3`
-- **Compute**: GPU-accelerated OpenMM on A6000
+- **Compute**: GPU-accelerated OpenMM on L40S (p_meiler_acc)
 
 ## Rosetta Relaxation (CPU)
 
-- **Job 9372018** (`green_rosetta`): array 1-257, 50 concurrent, depends on AMBER + 1KTZ AF completion
+- **Job 9373165** (`green_rosetta`): array 1-257, 50 concurrent, depends on AMBER + 1KTZ AF completion
 - **Wall time**: 72 hours per task
 - **Partition**: `batch` (CPU), account `p_csb_meiler`
 
@@ -208,11 +209,11 @@ backups in each target directory. All 257 targets have backups.
 ### Status
 
 AF and Boltz **re-runs with crystal-derived FASTAs** are complete:
-- AF: 256/257 complete (job 9324390). 1KTZ re-running (job 9372015) with template workaround (`max_template_date=1900-01-01`) to bypass AF 2.3.2 `templates.py` TypeError
+- AF: 256/257 complete (job 9324390). 1KTZ re-running (job 9373163) on A6000 with template workaround (`max_template_date=1900-01-01`) — L40S incompatible with AF2.3.2 CUDA/JAX
 - Boltz: 257/257 complete (job 9324391), zero failures
 - Old UniProt-based predictions backed up as `af_out_old_uniprot/` and `boltz_out_dir_old_uniprot/`
-- Standalone AMBER: **running** — job 9372017 (`green_amber`), GPU A6000, 10 models/target
-- Rosetta relaxation: **running (pending AMBER)** — job 9372018 (`green_rosetta`), 6 inputs x 6 protocols x 5 reps
+- Standalone AMBER: **~235/257 done** — job 9372421 (`green_amber`), GPU L40S (p_meiler_acc), 0 failures
+- Rosetta relaxation: **pending** — job 9373165 (`green_rosetta`), 6 inputs x 6 protocols x 5 reps, depends on AMBER + 1KTZ AF
 
 ---
 
@@ -300,10 +301,10 @@ during the bulk download (files already existed).
 | 2. Download FASTAs | Done | - | 249 RCSB + 2 obsolete replacements + 4 PDB-extracted + 2 pre-existing |
 | 3. Organize FASTAs | Done | - | 257 data/{ID}/sequence.fasta |
 | 4. Prepare Boltz input | Done | - | 257 data/{ID}/boltz_input.fasta |
-| 5. AlphaFold 2.3.2 | **256/257 done** | 9324390 + 9372015 (1KTZ retry) | Re-run with crystal-derived FASTAs. 1KTZ re-running with `max_template_date=1900-01-01` workaround |
+| 5. AlphaFold 2.3.2 | **256/257 done** | 9324390 + 9373163 (1KTZ retry) | Re-run with crystal-derived FASTAs. 1KTZ re-running with `max_template_date=1900-01-01` on A6000 (L40S incompatible with AF2.3.2) |
 | 6. Boltz-1 v0.4.1 | **Done (257/257)** | 9324391 | Re-run with dedup crystal-derived FASTAs. Zero failures |
-| 7. Standalone AMBER | **Running** | 9372017 (`green_amber`) | GPU A6000, 10 models/target (AF unrelaxed + Boltz), 10 concurrent |
-| 8. Rosetta relaxation | **Running (pending AMBER)** | 9372018 (`green_rosetta`) | 6 inputs x 6 protocols x 5 reps, depends on AMBER + 1KTZ AF |
+| 7. Standalone AMBER | **~235/257 done** | 9372421 (`green_amber`) | GPU L40S (p_meiler_acc), 10 models/target, 0 failures |
+| 8. Rosetta relaxation | **Pending** | 9373165 (`green_rosetta`) | 6 inputs x 6 protocols x 5 reps, depends on AMBER + 1KTZ AF |
 | 9. Built-in AMBER | **Done (in Step 5)** | - | 256/257 have 5 ranked (AMBER-relaxed) PDBs |
 | 10. MolProbity validation | Waiting on Rosetta | - | Phenix + reduce |
 | 11. Collect metrics | Waiting on Rosetta | - | PyMOL RMSD + Rosetta energies |
