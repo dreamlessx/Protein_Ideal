@@ -4,7 +4,9 @@
 
 Protein-Protein Complex Relaxation Benchmark using Docking Benchmark 5.5 (BM5.5).
 Benchmarking AlphaFold 2.3.2 and Boltz-1 predictions against experimental crystal structures,
-with relaxation across 7 protocols (1 AMBER/OpenMM + 6 Rosetta).
+with relaxation across 6 Rosetta protocols applied to 6 input types (AF relaxed, AF unrelaxed,
+Boltz, standalone AMBER of AF, standalone AMBER of Boltz, crystal). Green pipeline independently
+verifies Blue's protocol with matched parameters.
 
 **Lab**: Meiler Lab, Vanderbilt University
 **Cluster**: ACCRE (csb_gpu_acc)
@@ -34,8 +36,11 @@ with relaxation across 7 protocols (1 AMBER/OpenMM + 6 Rosetta).
   - Root cause of original 11 OOM failures: `boltz_input.fasta` listed all physical chain copies
     (quadratic attention scaling). Dedup to unique sequences resolved all OOMs on L40S 48GB
 - **FASTA strategy**: Crystal-derived sequences (not UniProt full-length) — see [FASTA Strategy](#fasta-strategy-crystal-derived-vs-uniprot-full-length)
-- **AlphaFold**: **256/257 complete** — 5 ranked + 5 unrelaxed per target, re-run with crystal-derived FASTAs (job 9324390). 1KTZ resubmitted with `reduced_dbs` (job 9370573) due to template processing bug (TypeError in AF 2.3.2 `templates.py`)
-- **Boltz-1**: **257/257 complete (100%)** — re-run with deduplicated crystal-derived FASTAs (job 9324391), zero failures
+- **AlphaFold relaxed (built-in AMBER)**: **256/257 complete** — 5 ranked (AMBER-relaxed) per target. 1KTZ re-running with template workaround (`max_template_date=1900-01-01`), job 9372015
+- **AlphaFold unrelaxed**: **256/257 complete** — 5 unrelaxed per target (same AF run as relaxed)
+- **Boltz-1**: **257/257 COMPLETE** — re-run with deduplicated crystal-derived FASTAs (job 9324391), zero failures
+- **Crystal structures**: **257/257 COMPLETE** — Rosetta-cleaned from BM5.5 bound PDBs
+- **FASTAs**: All crystal-derived, verified uniform: AF == Boltz == Crystal (257/257)
 - **Old predictions**: backed up as `af_out_old_uniprot/` and `boltz_out_dir_old_uniprot/`
 - **AF config**: `--nouse_gpu_relax --models_to_relax=all` (AMBER relax all 5 models on CPU)
 - **AF output**: 10 models per target (5 AMBER-relaxed `ranked_*.pdb` + 5 unrelaxed `unrelaxed_model_*.pdb`)
@@ -43,6 +48,77 @@ with relaxation across 7 protocols (1 AMBER/OpenMM + 6 Rosetta).
 - **Input verification**: Green's FASTAs verified against authoritative set — 0 sequence mismatches (251/251)
 - **DNA/RNA policy**: DNA/RNA chains excluded from all prediction FASTAs (protein-only). Fixed 3P57 and 1H9D.
 - **Disk usage**: ~10 GB (cleaned 31 GB of AF stderr logs; under 50 GB hard limit)
+
+## Standalone AMBER Relaxation (GPU)
+
+- **Job 9372017** (`green_amber`): array 1-257, 10 concurrent, GPU partition (A6000)
+- **Inputs**: AF unrelaxed (5 models) + Boltz (5 models) = 10 models per target
+- **Purpose**: test standalone AMBER relaxation vs AF's built-in AMBER relaxation
+- **AMBER parameters**: `max_iterations=0`, `tolerance=2.39`, `stiffness=10.0`, `max_outer_iterations=3`
+- **Compute**: GPU-accelerated OpenMM on A6000
+
+## Rosetta Relaxation (CPU)
+
+- **Job 9372018** (`green_rosetta`): array 1-257, 50 concurrent, depends on AMBER + 1KTZ AF completion
+- **Wall time**: 72 hours per task
+- **Partition**: `batch` (CPU), account `p_csb_meiler`
+
+### 6 Rosetta Input Types
+
+Each target produces up to 26 input models for Rosetta relaxation:
+
+| # | Input Type | Source | Models per Target | Description |
+|---|-----------|--------|-------------------|-------------|
+| 1 | `af_relaxed` | AF2 `ranked_*.pdb` | 5 | AF2 built-in AMBER-relaxed ranked models |
+| 2 | `af_unrelaxed` | AF2 `unrelaxed_model_*.pdb` | 5 | AF2 unrelaxed models (no AMBER) |
+| 3 | `boltz` | Boltz-1 `boltz_input_model_*.pdb` | 5 | Boltz-1 diffusion models |
+| 4 | `amber_af` | Standalone AMBER of AF unrelaxed | 5 | Standalone AMBER relaxation of AF unrelaxed |
+| 5 | `amber_boltz` | Standalone AMBER of Boltz | 5 | Standalone AMBER relaxation of Boltz |
+| 6 | `crystal` | `cleaned/*.pdb` | 1 | Experimental crystal structure (baseline) |
+
+**Total**: 6 input types x 5 models each (+ 1 crystal) = **26 models per target**
+
+### 6 Rosetta Protocols
+
+Each input model is relaxed with 6 protocols, each run 5 times:
+
+| # | Protocol | Space | Scoring | Key Flags |
+|---|----------|-------|---------|-----------|
+| 1 | `cartesian_beta` | Cartesian | beta_nov16 | `-relax:cartesian -beta_nov16 -score:weights beta_nov16_cart` |
+| 2 | `cartesian_ref15` | Cartesian | REF2015 | `-relax:cartesian -score:weights ref2015_cart` |
+| 3 | `dualspace_beta` | Dual-space | beta_nov16 | `-relax:dualspace -beta_nov16 -score:weights beta_nov16_cart -nonideal -relax:minimize_bond_angles -relax:minimize_bond_lengths` |
+| 4 | `dualspace_ref15` | Dual-space | REF2015 | `-relax:dualspace -score:weights ref2015_cart -nonideal -relax:minimize_bond_angles -relax:minimize_bond_lengths` |
+| 5 | `normal_beta` | Torsion | beta_nov16 | `-beta_nov16 -score:weights beta_nov16` |
+| 6 | `normal_ref15` | Torsion | REF2015 | `-score:weights ref2015` |
+
+### Rosetta Flags (Matching Blue for Comparison)
+
+```
+-nstruct 1                              # Single structure per run (5 explicit replicates via bash loop)
+-out:pdb_gz                             # Compressed output
+-flip_HNQ                               # Flip ambiguous His/Asn/Gln
+-fa_max_dis 9.0                         # Maximum interaction distance
+-optimization:default_max_cycles 200    # Convergence iterations
+-ignore_zero_occupancy false            # Process all atoms
+-no_nstruct_label                       # Clean output naming
+-out:levels all:warning                 # Suppress verbose logging
+-out::suffix "_r${r}"                   # Replicate suffix (_r1 through _r5)
+-scorefile relax.fasc                   # Score output file
+```
+
+### Rosetta Scale
+
+- **6 protocols x 5 replicates = 30 Rosetta runs per model**
+- **26 models per target x 30 runs = ~780 Rosetta runs per target**
+- **257 targets x ~780 runs = ~200,460 total Rosetta relaxations**
+
+### Pipeline Design Rationale
+
+- **Standalone AMBER = experimental test**: Does standalone AMBER (same parameters as AF's built-in) produce equivalent results when applied to AF unrelaxed models and Boltz models?
+- **AF built-in AMBER = control/reference**: AF's built-in relaxation serves as the baseline for comparing standalone AMBER
+- **AF relaxed + AF unrelaxed from SAME AF run**: Ensures fair comparison (identical predictions, different post-processing)
+- **Crystal relaxation = baseline**: Upper bound for structural quality; relaxed crystals show how much Rosetta can improve "perfect" structures
+- **Green pipeline verifies Blue's protocol**: Independent execution with matched parameters validates reproducibility
 
 ## FASTA Strategy: Crystal-Derived vs UniProt Full-Length
 
@@ -132,10 +208,11 @@ backups in each target directory. All 257 targets have backups.
 ### Status
 
 AF and Boltz **re-runs with crystal-derived FASTAs** are complete:
-- AF: 256/257 complete (job 9324390). 1KTZ resubmitted (job 9370573) — TypeError in AF 2.3.2 `templates.py` during template processing; retried with `reduced_dbs`
+- AF: 256/257 complete (job 9324390). 1KTZ re-running (job 9372015) with template workaround (`max_template_date=1900-01-01`) to bypass AF 2.3.2 `templates.py` TypeError
 - Boltz: 257/257 complete (job 9324391), zero failures
 - Old UniProt-based predictions backed up as `af_out_old_uniprot/` and `boltz_out_dir_old_uniprot/`
-- Rosetta relaxation: **just submitted** — jobs 9370594 (AF), 9370595 (Boltz), 9370596 (crystal). 6 protocols x 5 replicates, account `p_csb_meiler`, batch partition
+- Standalone AMBER: **running** — job 9372017 (`green_amber`), GPU A6000, 10 models/target
+- Rosetta relaxation: **running (pending AMBER)** — job 9372018 (`green_rosetta`), 6 inputs x 6 protocols x 5 reps
 
 ---
 
@@ -214,7 +291,7 @@ during the bulk download (files already existed).
 1HCF  1JPS  1K74  1VFB  2I25
 ```
 
-### Full BM5.5 Prediction (246 active targets) - ROSETTA RUNNING
+### Full BM5.5 Run (257 targets) - ROSETTA + AMBER RUNNING
 
 | Step | Status | SLURM Job(s) | Notes |
 |------|--------|-------------|-------|
@@ -223,26 +300,47 @@ during the bulk download (files already existed).
 | 2. Download FASTAs | Done | - | 249 RCSB + 2 obsolete replacements + 4 PDB-extracted + 2 pre-existing |
 | 3. Organize FASTAs | Done | - | 257 data/{ID}/sequence.fasta |
 | 4. Prepare Boltz input | Done | - | 257 data/{ID}/boltz_input.fasta |
-| 5. AlphaFold 2.3.2 | **256/257 done** | 9324390 + 9370573 (1KTZ retry) | Re-run with crystal-derived FASTAs. 1KTZ retrying (template bug) |
+| 5. AlphaFold 2.3.2 | **256/257 done** | 9324390 + 9372015 (1KTZ retry) | Re-run with crystal-derived FASTAs. 1KTZ re-running with `max_template_date=1900-01-01` workaround |
 | 6. Boltz-1 v0.4.1 | **Done (257/257)** | 9324391 | Re-run with dedup crystal-derived FASTAs. Zero failures |
-| 7. Rosetta relaxation | **Just submitted** | 9370594 (AF) + 9370595 (Boltz) + 9370596 (crystal) | 6 protocols x 5 replicates, account p_csb_meiler, batch partition |
-| 8. AMBER relaxation | **Done (in Step 5)** | - | All 246 targets have 5 ranked (AMBER-relaxed) PDBs |
-| 9. MolProbity validation | Waiting on Rosetta | - | Phenix + reduce |
-| 10. Collect metrics | Waiting on Rosetta | - | PyMOL RMSD + Rosetta energies |
+| 7. Standalone AMBER | **Running** | 9372017 (`green_amber`) | GPU A6000, 10 models/target (AF unrelaxed + Boltz), 10 concurrent |
+| 8. Rosetta relaxation | **Running (pending AMBER)** | 9372018 (`green_rosetta`) | 6 inputs x 6 protocols x 5 reps, depends on AMBER + 1KTZ AF |
+| 9. Built-in AMBER | **Done (in Step 5)** | - | 256/257 have 5 ranked (AMBER-relaxed) PDBs |
+| 10. MolProbity validation | Waiting on Rosetta | - | Phenix + reduce |
+| 11. Collect metrics | Waiting on Rosetta | - | PyMOL RMSD + Rosetta energies |
 
 ## Relaxation Protocols
 
-7 protocols total (1 AMBER + 6 Rosetta), 5 replicates each for Rosetta:
+### AMBER Relaxation (2 variants)
 
-| # | Protocol | Method | Notes |
-|---|----------|--------|-------|
-| 1 | AMBER (native) | AlphaFold OpenMM (ff14SB) | Computed during AF prediction (CPU relax) |
-| 2 | cartesian_beta | Rosetta | `-relax:cartesian -beta_nov16 -score:weights beta_nov16_cart` |
-| 3 | cartesian_ref15 | Rosetta | `-relax:cartesian -score:weights ref2015_cart` |
-| 4 | dualspace_beta | Rosetta | `-relax:dualspace -beta_nov16 -score:weights beta_nov16_cart -nonideal -relax:minimize_bond_angles -relax:minimize_bond_lengths` |
-| 5 | dualspace_ref15 | Rosetta | `-relax:dualspace -score:weights ref2015_cart -nonideal -relax:minimize_bond_angles -relax:minimize_bond_lengths` |
-| 6 | normal_beta | Rosetta | `-beta_nov16 -score:weights beta_nov16` |
-| 7 | normal_ref15 | Rosetta | `-score:weights ref2015` |
+| Variant | Method | Compute | Parameters |
+|---------|--------|---------|------------|
+| AF built-in AMBER | AlphaFold OpenMM (ff14SB) | CPU (`--nouse_gpu_relax`) | AF defaults: tolerance=2.39, stiffness=10.0 |
+| Standalone AMBER | OpenMM (ff14SB) | GPU (A6000) | max_iterations=0, tolerance=2.39, stiffness=10.0, max_outer_iterations=3 |
+
+### 6 Rosetta Protocols (5 replicates each)
+
+| # | Protocol | Space | Scoring | Key Flags |
+|---|----------|-------|---------|-----------|
+| 1 | cartesian_beta | Cartesian | beta_nov16 | `-relax:cartesian -beta_nov16 -score:weights beta_nov16_cart` |
+| 2 | cartesian_ref15 | Cartesian | REF2015 | `-relax:cartesian -score:weights ref2015_cart` |
+| 3 | dualspace_beta | Dual-space | beta_nov16 | `-relax:dualspace -beta_nov16 -score:weights beta_nov16_cart -nonideal -relax:minimize_bond_angles -relax:minimize_bond_lengths` |
+| 4 | dualspace_ref15 | Dual-space | REF2015 | `-relax:dualspace -score:weights ref2015_cart -nonideal -relax:minimize_bond_angles -relax:minimize_bond_lengths` |
+| 5 | normal_beta | Torsion | beta_nov16 | `-beta_nov16 -score:weights beta_nov16` |
+| 6 | normal_ref15 | Torsion | REF2015 | `-score:weights ref2015` |
+
+### Applied To (6 Input Types)
+
+| # | Input Type | Models | Description |
+|---|-----------|--------|-------------|
+| 1 | af_relaxed | 5 | AF2 built-in AMBER-relaxed ranked models |
+| 2 | af_unrelaxed | 5 | AF2 raw predictions (no AMBER) |
+| 3 | boltz | 5 | Boltz-1 diffusion models |
+| 4 | amber_af | 5 | Standalone AMBER relaxation of AF unrelaxed |
+| 5 | amber_boltz | 5 | Standalone AMBER relaxation of Boltz |
+| 6 | crystal | 1 | Experimental crystal structure (baseline) |
+
+**Total per target**: 26 models x 6 protocols x 5 replicates = **~780 Rosetta relaxations**
+**Total across benchmark**: 257 targets x ~780 = **~200K Rosetta relaxations**
 
 ## Key Findings (Preliminary)
 

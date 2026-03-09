@@ -320,10 +320,11 @@ methodological difference** between the two pipelines.
 - For targets with large UniProt-vs-crystal differences (e.g., 6A0Z: 989 vs 705 residues,
   1HE8: 1131 vs 915 residues), predictions may differ substantially due to different input coverage.
 
-**Re-run status:** AF re-run complete (256/257, 1KTZ retrying due to template bug). Boltz re-run
-complete (257/257, zero failures). Old UniProt-based predictions backed up as `af_out_old_uniprot/`
-and `boltz_out_dir_old_uniprot/`. Original FASTAs backed up as `sequence.fasta.pre_blue_match`.
-Rosetta relaxation just submitted (jobs 9370594, 9370595, 9370596).
+**Re-run status:** AF re-run complete (256/257, 1KTZ re-running job 9372015 with template workaround).
+Boltz re-run complete (257/257, zero failures). Old UniProt-based predictions backed up as
+`af_out_old_uniprot/` and `boltz_out_dir_old_uniprot/`. Original FASTAs backed up as
+`sequence.fasta.pre_blue_match`. Standalone AMBER running (job 9372017). Rosetta relaxation
+running (job 9372018, depends on AMBER completion).
 
 ## Summary of Impact
 
@@ -462,10 +463,11 @@ The most significant methodological differences that could affect results:
     | Milestone | Protein_Relax_Pipeline | Protein_Ideal |
     |-----------|----------------------|---------------|
     | Active benchmark targets | 257 | **257** (all targets active, crystal-derived FASTAs) |
-    | AF predictions | 257/257 complete | **256/257 complete** (re-run with crystal-derived FASTAs, job 9324390; 1KTZ retrying, job 9370573) |
+    | AF predictions | 257/257 complete | **256/257 complete** (re-run with crystal-derived FASTAs; 1KTZ re-running, job 9372015) |
     | Boltz predictions | 257/257 submitted | **257/257 complete** (re-run with crystal-derived FASTAs, job 9324391, zero failures) |
     | AMBER failures | 7 targets (unresolved) | **0 (all 7 resolved via FASTA fix)** |
-    | Rosetta relaxation | Submitted (job 9011271) | **Just submitted** (jobs 9370594/9370595/9370596, 6 protocols x 5 replicates) |
+    | Standalone AMBER | N/A | **Running** (job 9372017, GPU A6000, AF unrelaxed + Boltz) |
+    | Rosetta relaxation | Submitted (job 9011271) | **Running** (job 9372018, 6 inputs x 6 protocols x 5 reps, depends on AMBER) |
     | MolProbity | Pending | Pending (waiting on Rosetta) |
 
 17. **Relaxation script architecture**: Pipeline uses a single `relax_predictions.slurm`
@@ -474,3 +476,61 @@ The most significant methodological differences that could affect results:
     - `relax_predictions.slurm` — crystal structure relaxation (per-directory indexing)
     - `relax_test.slurm` — AI prediction relaxation (per-model indexing, AF + Boltz)
     - `relax_finish.slurm` — checkpoint recovery (scans for missing replicates, per-job indexing)
+
+    **Updated (March 8, 2026)**: Protein_Ideal now uses consolidated scripts:
+    - `green_amber.slurm` — standalone AMBER relaxation (AF unrelaxed + Boltz, GPU)
+    - `green_rosetta.slurm` — all 6 input types x 6 protocols x 5 replicates (CPU)
+
+## Green vs Blue Protocol Comparison
+
+The Green pipeline (Protein_Ideal) independently verifies the Blue pipeline
+(Protein_Relax_Pipeline) by executing the same relaxation benchmark with matched parameters.
+This section documents what matches and what differs.
+
+### Matching Blue's Protocol
+
+| Element | Green (Protein_Ideal) | Blue (Protein_Relax_Pipeline) | Match? |
+|---------|----------------------|-------------------------------|--------|
+| Rosetta protocols | 6 (cart/dual/norm x beta/ref15) | 6 (identical) | Yes |
+| Rosetta flags | See common flags below | Identical | Yes |
+| Replicates | 5 via bash loop (`_r1` to `_r5`) | 5 via bash loop (`_r1` to `_r5`) | Yes |
+| nstruct | 1 (not nstruct=5) | 1 (not nstruct=5) | Yes |
+| Output format | `.pdb.gz` (compressed) | `.pdb.gz` (compressed) | Yes |
+| AMBER parameters | max_iterations=0, tolerance=2.39, stiffness=10.0, max_outer_iterations=3 | Same | Yes |
+| Input types | 6 (af_relaxed, af_unrelaxed, boltz, amber_af, amber_boltz, crystal) | 6 (same) | Yes |
+| Crystal-derived FASTAs | Yes (257/257 verified) | Yes (257/257 verified) | Yes |
+| Crystal structures | Rosetta-cleaned from BM5.5 bound PDBs | Same cleaning pipeline | Yes |
+| Scoring functions | beta_nov16, REF2015 | beta_nov16, REF2015 | Yes |
+
+**Common Rosetta flags (identical between Green and Blue):**
+```
+-ignore_zero_occupancy false
+-nstruct 1
+-no_nstruct_label
+-out:pdb_gz
+-flip_HNQ
+-fa_max_dis 9.0
+-optimization:default_max_cycles 200
+-out:levels all:warning
+-out::suffix "_r${r}"
+-scorefile relax.fasc
+```
+
+### Known Differences
+
+| Aspect | Green (Protein_Ideal) | Blue (Protein_Relax_Pipeline) |
+|--------|----------------------|-------------------------------|
+| Job naming | `green_` prefix (`green_amber`, `green_rosetta`) | `blue_` or no prefix |
+| Directory structure | `benchmarking/data/{ID}/` | `af_work/{ID}/` |
+| Target enumeration | `af_dirlist.txt` (line-numbered) | `ls af_work \| sort` |
+| Crystal relaxation timing | Included in v1 (from the start) | Added in v2 (later addition) |
+| AMBER compute | GPU (A6000) for standalone | GPU for standalone |
+| AF AMBER compute | CPU (`--nouse_gpu_relax`) | GPU (`--use_gpu_relax`) |
+| Rosetta version | 3.15 | 3.14 |
+| Rosetta wall time | 72h | 48h (Blue), may vary |
+| Script architecture | 2 consolidated scripts (AMBER + Rosetta) | Multiple scripts per input type |
+
+**Note on AF AMBER**: Green uses CPU AMBER relaxation during AF prediction (`--nouse_gpu_relax`)
+while Blue uses GPU relaxation (`--use_gpu_relax`). Both produce numerically equivalent results.
+The standalone AMBER relaxation (applied to AF unrelaxed and Boltz models) uses the same
+parameters in both pipelines.

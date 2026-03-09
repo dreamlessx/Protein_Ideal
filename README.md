@@ -668,31 +668,58 @@ ls test/1AK4/Boltz/
 
 ---
 
-## 10. Step 8: Run Relaxation (7 Protocols)
+## 10. Step 8: Run Relaxation (6 Input Types x 6 Rosetta Protocols)
 
 ### Overview
 
-7 relaxation protocols total: 1 AMBER (computed during AF prediction) + 6 Rosetta.
+The relaxation benchmark applies 6 Rosetta protocols to 6 input types, plus standalone
+AMBER relaxation as a separate test. This design enables systematic comparison of:
+- Different prediction sources (AF vs Boltz vs crystal)
+- Different relaxation methods (AMBER vs Rosetta)
+- Different Rosetta scoring functions (beta_nov16 vs REF2015)
+- Different Rosetta search spaces (Cartesian vs torsion vs dual-space)
 
-### Protocol 1: AMBER Relaxation (AlphaFold Native)
+**Green pipeline verification**: This pipeline independently reproduces the Blue pipeline's
+protocol with matched parameters, providing cross-validation of the relaxation benchmark.
 
-AMBER relaxation via OpenMM is performed during AlphaFold prediction (Step 5):
+### AMBER Relaxation (2 Variants)
+
+**1. AF built-in AMBER** (computed during AlphaFold prediction, Step 5):
 - **Force field**: AMBER ff14SB
 - **Energy tolerance**: 2.39 kcal/mol
 - **Position restraint stiffness**: 10.0 kcal/mol/A^2
 - **Compute**: CPU (`--nouse_gpu_relax`)
 - **Output**: `ranked_*.pdb` files (already generated in Step 5)
+- No separate script needed — built into AlphaFold's `--models_to_relax=all`
 
-No separate script needed — AMBER relaxation is built into AlphaFold's `--models_to_relax=all`.
+**2. Standalone AMBER** (GPU, separate from AF):
+- **Script**: `green_amber.slurm` (job 9372017)
+- **Inputs**: AF unrelaxed (5 models) + Boltz (5 models) = 10 models per target
+- **Parameters**: `max_iterations=0`, `tolerance=2.39`, `stiffness=10.0`, `max_outer_iterations=3`
+- **Compute**: GPU-accelerated OpenMM on A6000
+- **Purpose**: Test whether standalone AMBER produces equivalent results to AF's built-in AMBER
 
-### Protocols 2-7: Rosetta Relaxation
+### 6 Rosetta Input Types
 
-### Script: `relax_predictions.slurm`
+| # | Input Type | Source | Models | Description |
+|---|-----------|--------|--------|-------------|
+| 1 | `af_relaxed` | `ranked_*.pdb` | 5 | AF2 built-in AMBER-relaxed models |
+| 2 | `af_unrelaxed` | `unrelaxed_model_*.pdb` | 5 | AF2 raw predictions (no AMBER) |
+| 3 | `boltz` | `boltz_input_model_*.pdb` | 5 | Boltz-1 diffusion models |
+| 4 | `amber_af` | Standalone AMBER output | 5 | Standalone AMBER of AF unrelaxed |
+| 5 | `amber_boltz` | Standalone AMBER output | 5 | Standalone AMBER of Boltz |
+| 6 | `crystal` | `cleaned/*.pdb` | 1 | Experimental crystal structure (baseline) |
+
+**Total**: 26 models per target
+
+### Rosetta Relaxation
+
+### Script: `green_rosetta.slurm` (job 9372018)
 
 **What it does:**
-1. For each PDB directory in `test/`:
-   - Finds the crystal structure PDB
-   - Runs 6 relaxation protocols x 5 replicates = 30 relaxed structures
+1. For each target, relaxes all 26 input models (6 types):
+   - 6 Rosetta protocols x 5 replicates = 30 relaxed structures per model
+   - Total: ~780 Rosetta runs per target, ~200K across the benchmark
 2. Each replicate uses `-nstruct 1` with a different suffix (`_r1` through `_r5`)
 
 ### The 6 Rosetta Protocols
@@ -709,28 +736,32 @@ No separate script needed — AMBER relaxation is built into AlphaFold's `--mode
 ### Run
 
 ```bash
-# Crystal structure relaxation
-N=$(ls -d test/*/ | wc -l)
-sbatch --array=1-${N} scripts/relax_predictions.slurm
+# Submit standalone AMBER first (GPU, 10 concurrent)
+sbatch --array=1-257%10 scripts/green_amber.slurm
+
+# Submit Rosetta after AMBER completes (CPU, 50 concurrent, depends on AMBER + AF)
+sbatch --dependency=afterok:<AMBER_JOBID>:<AF_JOBID> --array=1-257%50 scripts/green_rosetta.slurm
 ```
 
-For AI prediction relaxation, the script needs to be modified to iterate over AF and Boltz models within each PDB directory. The extended version (used in our pipeline) does:
+The Rosetta script iterates over all 6 input types for each target:
 
 ```bash
-# For each PDB in test/:
-#   For each source (AF, Boltz):
-#     For each model (5 models):
-#       For each protocol (6 protocols):
+# For each target (1 SLURM array task per target):
+#   For each input type (af_relaxed, af_unrelaxed, boltz, amber_af, amber_boltz, crystal):
+#     For each model (5 per type, 1 for crystal):
+#       For each protocol (6 Rosetta protocols):
 #         For each replicate (5 replicates):
-#           Run Rosetta relax → test/{PDB}/relax/{source}/{model}/{protocol}/
+#           Run Rosetta relax → data/{ID}/rosetta/{input_type}/{model}/{protocol}/
 ```
 
 ### Script Audit
 
-**Resources:** 1 node, 1 CPU, 4GB RAM, 48h
+**Resources (green_rosetta.slurm):** 1 node, 1 CPU, 4GB RAM, 72h, batch partition
 **No GPU required** — Rosetta relax is CPU-only
 
-**Common Rosetta flags:**
+**Resources (green_amber.slurm):** 1 node, 1 GPU (A6000), 72h, batch_gpu partition
+
+**Common Rosetta flags (matching Blue's protocol):**
 - `-ignore_zero_occupancy false` — processes all atoms regardless of occupancy
 - `-nstruct 1` — one structure per run (replicates via suffix)
 - `-no_nstruct_label` — don't add `_0001` to output filename
@@ -738,33 +769,19 @@ For AI prediction relaxation, the script needs to be modified to iterate over AF
 - `-flip_HNQ` — optimize His/Asn/Gln hydrogen placement
 - `-fa_max_dis 9.0` — maximum interaction distance for scoring
 - `-optimization:default_max_cycles 200` — convergence iterations
+- `-out:levels all:warning` — suppress verbose logging
+- `-out::suffix "_r${r}"` — replicate suffix
+- `-scorefile relax.fasc` — score output file
 
 **Potential issues:**
-- 48h timeout: a single PDB with 6 protocols x 5 replicates = 30 runs. Each relax takes 5-60 minutes depending on size. Large complexes (>800 residues) may timeout.
+- 72h timeout: a single target with 26 models x 6 protocols x 5 replicates = ~780 runs. Each relax takes 5-60 minutes depending on size. Very large complexes may timeout.
 - 4GB RAM is tight for large complexes. May need 8-16GB for >600 residues.
-- The script uses `${CFG[$key]}` without quoting — this works because the values have no spaces in critical positions, but it's technically fragile.
 
 ### Expected Output
 
 ```
-test/{PDBID}/
-├── cartesian_beta/
-│   ├── {PDBID}_r1.pdb.gz through _r5.pdb.gz
-│   ├── log/
-│   │   └── {PDBID}_cart_beta_r1.log through _r5.log
-│   └── relax.fasc
-├── cartesian_ref15/
-│   └── [same structure]
-├── dualspace_beta/
-├── dualspace_ref15/
-├── normal_beta/
-└── normal_ref15/
-```
-
-For AI predictions:
-```
-test/{PDBID}/relax/
-├── AF/
+data/{PDBID}/rosetta/
+├── af_relaxed/
 │   ├── ranked_0/
 │   │   ├── cartesian_beta/ranked_0_r1.pdb.gz ... _r5.pdb.gz
 │   │   ├── cartesian_ref15/
@@ -772,30 +789,48 @@ test/{PDBID}/relax/
 │   │   ├── dualspace_ref15/
 │   │   ├── normal_beta/
 │   │   └── normal_ref15/
-│   ├── ranked_1/
-│   └── ... (ranked_2 through ranked_4)
-└── Boltz/
-    ├── boltz_input_model_0/
-    └── ... (model_1 through model_4)
+│   └── ... (ranked_1 through ranked_4)
+├── af_unrelaxed/
+│   └── ... (unrelaxed_model_1 through unrelaxed_model_5)
+├── boltz/
+│   └── ... (boltz_input_model_0 through boltz_input_model_4)
+├── amber_af/
+│   └── ... (amber-relaxed AF unrelaxed models)
+├── amber_boltz/
+│   └── ... (amber-relaxed Boltz models)
+└── crystal/
+    ├── cartesian_beta/{PDBID}_r1.pdb.gz ... _r5.pdb.gz
+    ├── cartesian_ref15/
+    ├── dualspace_beta/
+    ├── dualspace_ref15/
+    ├── normal_beta/
+    └── normal_ref15/
 ```
+
+Each protocol directory contains:
+- 5 replicate PDB files (`*_r1.pdb.gz` through `*_r5.pdb.gz`)
+- `relax.fasc` (Rosetta score file)
+- `log/` directory with per-replicate logs
 
 ### Verification Checkpoint
 
 ```bash
-# Count relaxed structures for a single PDB (crystal only)
-find test/1AK4/ -maxdepth 2 -name '*.pdb.gz' | wc -l
-# Expected: 30 (6 protocols x 5 replicates)
+# Count relaxed structures for a single target (all 6 input types)
+find data/1AK4/rosetta/ -name '*.pdb.gz' | wc -l
+# Expected: ~780 (26 models x 6 protocols x 5 replicates)
 
-# Count relaxed structures including AI predictions
-find test/1AK4/relax/ -name '*.pdb.gz' | wc -l
-# Expected: 300 (10 models x 6 protocols x 5 replicates)
+# Count by input type
+for t in af_relaxed af_unrelaxed boltz amber_af amber_boltz crystal; do
+    echo "$t: $(find data/1AK4/rosetta/$t/ -name '*.pdb.gz' 2>/dev/null | wc -l)"
+done
+# Expected: 150 each (5 models x 6 protocols x 5 reps), 30 for crystal (1 x 6 x 5)
 
 # Verify a relaxation log looks normal (check for "Total weighted score")
-tail -5 test/1AK4/cartesian_beta/log/1AK4_cart_beta_r1.log
+tail -5 data/1AK4/rosetta/crystal/cartesian_beta/log/*_cart_beta_r1.log
 # Expected: should end with score information, no errors
 
 # Check that .fasc files contain scores
-head -3 test/1AK4/cartesian_beta/relax.fasc
+head -3 data/1AK4/rosetta/crystal/cartesian_beta/relax.fasc
 # Expected: SCORE: header line followed by data
 ```
 
@@ -956,9 +991,11 @@ head -5 metrics.tsv
 | 6 | `boltz_array.slurm` | **PASS** | MSA server needs internet from compute node; 257/257 complete (re-run with crystal-derived FASTAs) |
 | 6 | `boltz_single.slurm` | **PASS** | Same MSA server caveat |
 | 7 | Organize predictions | Manual | No script — documented above |
-| 8 | `relax_predictions.slurm` | **PASS with caveat** | Crystal structures; 48h may timeout for large complexes |
-| 8 | `relax_test.slurm` | **PASS** | AI predictions (AF + Boltz); per-model array indexing |
-| 8 | `relax_finish.slurm` | **PASS with caveat** | Checkpoint recovery; uses `$protocol` instead of `$PROTOCOL` (line 108 bug) |
+| 8a | `green_amber.slurm` | **PASS** | Standalone AMBER relaxation (AF unrelaxed + Boltz, GPU A6000) |
+| 8b | `green_rosetta.slurm` | **PASS** | All 6 input types x 6 protocols x 5 reps; 72h wall time |
+| 8 (legacy) | `relax_predictions.slurm` | **Superseded** | Replaced by `green_rosetta.slurm` |
+| 8 (legacy) | `relax_test.slurm` | **Superseded** | Replaced by `green_rosetta.slurm` |
+| 8 (legacy) | `relax_finish.slurm` | **Superseded** | Replaced by `green_rosetta.slurm` |
 | 9 | `run_molprobity.sh` | **PASS** | Phenix version-dependent output parsing |
 | 10 | `collect_metrics.py` | **PASS** | No issues |
 
