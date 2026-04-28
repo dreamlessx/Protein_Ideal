@@ -280,10 +280,10 @@ Both AF jobs from the full reset were cancelled. Resubmitted as:
 ### Boltz-1 Progress and CIF Bug Fix
 
 - Job 8827453: 157/257 completed, rest cancelled
-- **Bug found**: Script missing `--output_format pdb` — all 157 targets produced `.cif` (mmCIF)
+- **Bug found**: Script missing `--output_format pdb`. All 157 targets produced `.cif` (mmCIF)
   instead of `.pdb`. Rosetta cannot read mmCIF format.
 - **Fix applied**:
-  1. Converted all 785 CIF files to PDB using BioPython (`MMCIFParser` + `PDBIO`) — 0 failures
+  1. Converted all 785 CIF files to PDB using BioPython (`MMCIFParser` + `PDBIO`); 0 failures
   2. Added `--output_format pdb` to `boltz_array.slurm`
   3. Updated skip guard to check for both `.cif` and `.pdb` files
 - **Resubmitted**: Job **8851422** for 100 remaining targets with corrected script
@@ -300,8 +300,8 @@ Using full databases (equivalent to `--db_preset=full_dbs`) with `reduced_dbs` f
 ### AF Model Numbering Note
 
 AlphaFold uses different numbering conventions for its output files:
-- `ranked_0.pdb` through `ranked_4.pdb` — 0-indexed, ordered by model confidence
-- `unrelaxed_model_1_*.pdb` through `unrelaxed_model_5_*.pdb` — 1-indexed, not ordered by confidence
+- `ranked_0.pdb` through `ranked_4.pdb`: 0-indexed, ordered by model confidence
+- `unrelaxed_model_1_*.pdb` through `unrelaxed_model_5_*.pdb`: 1-indexed, not ordered by confidence
 
 The mapping between ranked and unrelaxed models is in `ranking_debug.json`. For example,
 `ranked_0.pdb` may correspond to `unrelaxed_model_3_*.pdb` depending on which model scored highest.
@@ -317,7 +317,7 @@ The mapping between ranked and unrelaxed models is in `ranking_debug.json`. For 
 
 ## 2026-02-10: HHblits Fallback, Boltz OOM Analysis
 
-### HHblits Failure on 1IRA — Fallback Added
+### HHblits Failure on 1IRA: Fallback Added
 
 - AF highmem job 8851184 task 59 (1IRA) failed after 43 min
 - Error: HHblits titin fragments in BFD exceed 32763 residue limit
@@ -328,7 +328,7 @@ The mapping between ranked and unrelaxed models is in `ranking_debug.json`. For 
   - On full_dbs failure: clean partial output, retry with `--db_preset=reduced_dbs` + `small_bfd`
 - Resubmitted 1IRA as job **8851737** with updated script
 
-### Boltz OOM — Tiered GPU Strategy
+### Boltz OOM: Tiered GPU Strategy
 
 **Problem**: 23/257 targets OOM on L40S (48GB VRAM) with 5 diffusion samples.
 
@@ -414,9 +414,9 @@ all 257 targets for DNA/RNA sequences in FASTAs. Found 2 targets:
 Both `sequence.fasta` and `boltz_input.fasta` updated for each target.
 Neither target had started AF yet (3P57=task 193, 1H9D=task 49), so no
 re-runs needed. The `boltz_input.fasta` files also had a bug where DNA
-chains were mislabeled as `|PROTEIN|` — now fixed.
+chains were mislabeled as `|PROTEIN|`, now fixed.
 
-BP57 and CP57 (derived from 3P57) already had DNA stripped — no changes needed.
+BP57 and CP57 (derived from 3P57) already had DNA stripped, no changes needed.
 
 ### Disk Cleanup
 
@@ -437,7 +437,7 @@ with reduced_dbs.
 
 ### Boltz Final Status
 
-248/257 (96.5%) — no changes from earlier:
+248/257 (96.5%); no changes from earlier:
 - 246 targets: 5 models (standard)
 - 2 targets (1GXD, 3EO1): 1 model (H100 1-sample)
 - 9 targets: permanently OOMed (>3000 residues, AF-only)
@@ -471,7 +471,7 @@ ClaudeChat was restructured by Red Pro-Ops:
 AMBER failures on 1ATN, 1DFJ, 1FC2: all 5 unrelaxed models saved correctly by
 the safety logic in af_array.slurm. AMBER relaxation failed (likely empty residues
 or non-standard atoms), but the unrelaxed models are the baseline for Rosetta
-relaxation — so these targets will have 6 protocols (Rosetta only) instead of 7.
+relaxation, so these targets will have 6 protocols (Rosetta only) instead of 7.
 
 ### INSTRUCTIONS.md Created
 
@@ -495,7 +495,7 @@ Down from 28 GB after further AF cleanup. Well under 30 GB soft target.
 Main job 8851183 completed. Results:
 - 220 targets: full 10 models (5 ranked + 5 unrelaxed)
 - 6 AMBER failures: 1ATN, 1DFJ, 1FC2, 2BTF, 4CPA, 5JMO (5 unrelaxed each)
-- 31 targets: HHblits failure — all with `RuntimeError: HHblits failed` (titin/32763 residue limit)
+- 31 targets: HHblits failure: all with `RuntimeError: HHblits failed` (titin/32763 residue limit)
 
 ### Root Cause of 31 HHblits Failures
 
@@ -511,7 +511,7 @@ Cleaned failed af_out directories (had only MSAs, no models). Resubmitted all 31
 sbatch --array=109,134,157,...,252%10 af_array.slurm
 ```
 Job 9011401 uses the current script with full_dbs → reduced_dbs fallback.
-Status: PENDING (QOSGrpGRES — GPU queue congested, 2189 pending cluster-wide).
+Status: PENDING (QOSGrpGRES, GPU queue congested, 2189 pending cluster-wide).
 
 ### AMBER Failure Comparison with Blue
 
@@ -571,7 +571,7 @@ C-terminus requiring regex removal.
 
 Note: 1WEJ was previously classified as HHblits failure (pre-fallback script).
 With the FASTA fix and current script (with reduced_dbs fallback), it completed
-successfully — confirming it was an AMBER target all along, matching Blue's 7/7.
+successfully, confirming it was an AMBER target all along, matching Blue's 7/7.
 
 ---
 
@@ -602,7 +602,7 @@ All prediction data pushed to GitHub (Protein_Ideal repo) as disaster recovery:
 
 Total: ~4,345 files, ~2.5 GB. Within GitHub's 5 GB limit (PDBs only, no MSAs/logs).
 
-### 9 Targets Excluded from Benchmark — Boltz OOM
+### 9 Targets Excluded from Benchmark: Boltz OOM
 
 **Decision**: Remove 9 targets entirely from all datasets (AF, Boltz, crystal, list files).
 These targets cannot be predicted by Boltz-1, so they cannot participate in the AF-vs-Boltz
@@ -611,7 +611,7 @@ dataset where some targets have both predictors and others only have AF.
 
 **Root cause**: Boltz-1's diffusion architecture uses pairwise attention that scales
 quadratically with total input residues. All 9 targets are **large symmetric complexes**
-where the total residue count across all physical chains exceeds 3,000 — the empirical
+where the total residue count across all physical chains exceeds 3,000: the empirical
 OOM threshold on our largest available GPU (H100 80GB).
 
 **Common characteristics**:
@@ -636,15 +636,15 @@ OOM threshold on our largest available GPU (H100 80GB).
 | 6EY6 | 453 | 2 groups × 8 = 16 chains | 3,624 | L40S 48GB, H100 80GB |
 
 **What would be needed**: Multi-GPU model parallelism (not supported by Boltz-1 v0.4.1)
-or GPUs with >160 GB VRAM (e.g., A100 160GB, H200 — not available on ACCRE).
+or GPUs with >160 GB VRAM (e.g., A100 160GB, H200, not available on ACCRE).
 
 **Files updated**: `bm55_pdb_list.txt`, `af_dirlist.txt` (257 → 246 entries).
 AF predictions, cleaned PDBs, merged PDBs, and FASTA files removed from GitHub repo.
 
-### 2 Additional Targets Excluded — Incomplete Boltz Models
+### 2 Additional Targets Excluded: Incomplete Boltz Models
 
 **1GXD** and **3EO1** produced only **1 Boltz model** instead of 5. These targets are in
-the 2,200-3,000 total residue range — too large for 5 diffusion samples on H100 80GB,
+the 2,200-3,000 total residue range: too large for 5 diffusion samples on H100 80GB,
 but able to squeeze through with 1 sample. Since every other target has 5 Boltz models,
 keeping these 2 with only 1 model would create an inconsistent dataset for statistical
 comparison. Excluded for consistency.
@@ -662,14 +662,14 @@ comparison. Excluded for consistency.
 | Excluded (full OOM, >3000 res) | 9 |
 | Excluded (partial OOM, 1/5 models) | 2 |
 | **Active benchmark** | **246** |
-| AF predictions | 246/246 — 5 models each (1,230 PDBs) |
-| Boltz predictions | 246/246 — 5 models each (1,230 PDBs) |
+| AF predictions | 246/246, 5 models each (1,230 PDBs) |
+| Boltz predictions | 246/246, 5 models each (1,230 PDBs) |
 
 ---
 
 ### Disk Cleanup
 
-Deleted 31 GB of AF stderr logs (`benchmarking/logs/*.err`) — TensorFlow warning spam
+Deleted 31 GB of AF stderr logs (`benchmarking/logs/*.err`), TensorFlow warning spam
 from completed jobs. Disk: 41 GB → 9.8 GB. Provides headroom for Rosetta outputs.
 
 ---
@@ -679,3 +679,14 @@ from completed jobs. Disk: 41 GB → 9.8 GB. Provides headroom for Rosetta outpu
 - **Step 8**: MolProbity + PoseBusters validation
 - **Step 9**: Collect RMSD + energy metrics
 - **Step 10**: Figures and analysis (Teal)
+
+---
+
+## 2026-04-27: 100% Data Lock
+
+Rosetta Green pipeline: 100.000% (208,170 / 208,170). All 11 prior Boltz-OOM
+targets resolved via FASTA deduplication. 1ACB and 1ATN AMBER-crystal failures
+resolved via v5 chain-split preprocessing. cn1340 ACCRE node excluded from all
+SLURM jobs after 1,614+ failures traced to it. Combined Blue+Green frame in
+companion repo dreamlessx/Protein_Relax_Pipeline: 416,340/416,340 Rosetta
+MolProbity rows. Snapshot 2026-04-27a, qc_status=pass.

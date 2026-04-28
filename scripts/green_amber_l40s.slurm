@@ -9,6 +9,7 @@
 #SBATCH --time=06:00:00
 #SBATCH --job-name=green_amber
 #SBATCH --array=1-257%10
+#SBATCH --exclude=cn1340
 #SBATCH --output=logs/green_amber_%A_%a.out
 #SBATCH --error=logs/green_amber_%A_%a.err
 

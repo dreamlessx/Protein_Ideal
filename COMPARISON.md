@@ -11,7 +11,7 @@ All values verified against actual SLURM scripts and READMEs in both repositorie
 |---|---|---|
 | Dataset | BM5.5 full | BM5.5 full |
 | Total BM5.5 targets | 257 | 257 |
-| Active benchmark | 257 | **257** (all targets active — 119 use deduplicated unique-chain FASTAs) |
+| Active benchmark | 257 | **257** (all 257 BM5.5 targets active; 11 prior OOM targets resolved via FASTA dedup) |
 | Rigid-body | 162 | 162 |
 | Medium | 60 | 60 |
 | Difficult | 35 | 35 |
@@ -320,11 +320,7 @@ methodological difference** between the two pipelines.
 - For targets with large UniProt-vs-crystal differences (e.g., 6A0Z: 989 vs 705 residues,
   1HE8: 1131 vs 915 residues), predictions may differ substantially due to different input coverage.
 
-**Re-run status:** AF re-run complete (256/257, 1KTZ re-running job 9372015 with template workaround).
-Boltz re-run complete (257/257, zero failures). Old UniProt-based predictions backed up as
-`af_out_old_uniprot/` and `boltz_out_dir_old_uniprot/`. Original FASTAs backed up as
-`sequence.fasta.pre_blue_match`. Standalone AMBER running (job 9372017). Rosetta relaxation
-running (job 9372018, depends on AMBER completion).
+**Production status:** AF: 257/257 COMPLETE. Boltz: 257/257 COMPLETE. Standalone AMBER: 257/257 COMPLETE. Rosetta Green pipeline: 100.000% (208,170/208,170).
 
 ## Summary of Impact
 
@@ -362,15 +358,15 @@ The most significant methodological differences that could affect results:
 
 8. **HHblits fallback mechanism**: Both pipelines wrap the AF call in a retry function.
    On failure, the script checks for existing `unrelaxed_model_*.pdb` files. If present,
-   AMBER failed but prediction succeeded — unrelaxed models are preserved. If absent,
-   HHblits failed — output is cleaned and AF retries with `--db_preset=reduced_dbs` +
+   AMBER failed but prediction succeeded; unrelaxed models are preserved. If absent,
+   HHblits failed; output is cleaned and AF retries with `--db_preset=reduced_dbs` +
    `--small_bfd_database_path`. Three targets confirmed: 1IRA, 1DQJ, 1MLC all completed
    with reduced_dbs fallback. Full_dbs uses HHblits + BFD + UniRef30; reduced_dbs uses
    jackhmmer + small_bfd.
 
    **Critical issue discovered in Protein_Ideal**: 31 targets failed with `RuntimeError:
    HHblits failed` because the main AF job (8851183) was submitted BEFORE the `reduced_dbs`
-   fallback was added to `af_array.slurm`. SLURM copies the script at submission time —
+   fallback was added to `af_array.slurm`. SLURM copies the script at submission time;
    modifying the script after submission has no effect on running jobs. These 31 targets
    hit the BFD titin-like sequence issue (32763 residue limit for immunoglobulin domains)
    with no fallback available. Root cause: script versioning, not a code bug.
@@ -383,6 +379,10 @@ The most significant methodological differences that could affect results:
    no atoms`), unrelaxed models survive as baseline for Rosetta relaxation. The script
    detects partial output (unrelaxed models present, no ranking_debug.json) and preserves
    them rather than deleting everything during a reduced_dbs retry.
+
+   **Bug Fixes Applied:**
+   - 1ACB + 1ATN AMBER-crystal resolved via v5 chain-split preprocessing.
+   - cn1340 SLURM exclusion (1,614 node failures).
 
    **Root cause (identified by Blue)**: Non-standard residues **X** (unknown amino acid)
    and **Z** (ambiguous Glu/Gln) in FASTA sequences. AlphaFold predicts structure but
@@ -421,9 +421,9 @@ The most significant methodological differences that could affect results:
    diffusion samples, succeeded at 1). All 11 excluded from the benchmark to maintain
    a consistent dataset where every target has 5 AF + 5 Boltz models.
 
-   **Benchmark reduced from 257 → 246 targets.**
-   Excluded (full OOM): 1DE4, 1K5D, 1N2C, 1WDW, 1ZM4, 3BIW, 3L89, 4GXU, 6EY6.
-   Excluded (partial OOM): 1GXD, 3EO1.
+   All 257 BM5.5 targets active (11 prior OOM targets resolved via FASTA dedup).
+   Originally excluded (full OOM): 1DE4, 1K5D, 1N2C, 1WDW, 1ZM4, 3BIW, 3L89, 4GXU, 6EY6.
+   Originally excluded (partial OOM): 1GXD, 3EO1.
 
 11. **DNA/RNA exclusion**: Both pipelines exclude DNA/RNA chains from prediction FASTAs.
     BM5.5 is a protein-protein benchmark; neither AF nor Boltz supports nucleic acids.
@@ -455,31 +455,24 @@ The most significant methodological differences that could affect results:
     target on ACCRE. AF intermediate files (MSAs, pickles) can consume ~1 GB per target.
     After 226 targets completed, disk hit 66 GB before emergency cleanup (MSAs, pickles,
     failed af_out dirs) brought it back to 30 GB. The cleanup script in `af_array.slurm`
-    only runs on success — failed jobs leave intermediates behind. Pipeline operates on
+    only runs on success: failed jobs leave intermediates behind. Pipeline operates on
     `/dors/meilerlab/` which has larger quotas.
 
-16. **Production status comparison** (as of March 8, 2026):
+16. **Production status comparison** (as of 2026-04-27):
 
     | Milestone | Protein_Relax_Pipeline | Protein_Ideal |
     |-----------|----------------------|---------------|
     | Active benchmark targets | 257 | **257** (all targets active, crystal-derived FASTAs) |
-    | AF predictions | 257/257 complete | **256/257 complete** (re-run with crystal-derived FASTAs; 1KTZ re-running, job 9372015) |
-    | Boltz predictions | 257/257 submitted | **257/257 complete** (re-run with crystal-derived FASTAs, job 9324391, zero failures) |
-    | AMBER failures | 7 targets (unresolved) | **0 (all 7 resolved via FASTA fix)** |
-    | Standalone AMBER | N/A | **Running** (job 9372017, GPU A6000, AF unrelaxed + Boltz) |
-    | Rosetta relaxation | Submitted (job 9011271) | **Running** (job 9372018, 6 inputs x 6 protocols x 5 reps, depends on AMBER) |
-    | MolProbity | Pending | Pending (waiting on Rosetta) |
+    | AF predictions | 257/257 COMPLETE | 257/257 COMPLETE |
+    | Boltz predictions | 257/257 COMPLETE | 257/257 COMPLETE, zero failures |
+    | AMBER failures | 0 (resolved) | 0 (all 7 original failures resolved via FASTA fix) |
+    | Standalone AMBER | 257/257 COMPLETE | 257/257 COMPLETE (AF + Boltz + crystal) |
+    | Rosetta relaxation | 100% (208,170/208,170) | 100.000% (208,170/208,170) |
+    | MolProbity | COMPLETE (canonical analysis in red_analysis/) | COMPLETE (analysis in companion repo) |
 
-17. **Relaxation script architecture**: Pipeline uses a single `relax_predictions.slurm`
-    that iterates over PDB directories (crystal structures only). Protein_Ideal has three
-    complementary scripts:
-    - `relax_predictions.slurm` — crystal structure relaxation (per-directory indexing)
-    - `relax_test.slurm` — AI prediction relaxation (per-model indexing, AF + Boltz)
-    - `relax_finish.slurm` — checkpoint recovery (scans for missing replicates, per-job indexing)
-
-    **Updated (March 8, 2026)**: Protein_Ideal now uses consolidated scripts:
-    - `green_amber.slurm` — standalone AMBER relaxation (AF unrelaxed + Boltz, GPU)
-    - `green_rosetta.slurm` — all 6 input types x 6 protocols x 5 replicates (CPU)
+17. **Relaxation script architecture**: Protein_Ideal uses two consolidated scripts:
+    - `green_amber_l40s.slurm`: standalone AMBER relaxation (AF unrelaxed + Boltz + crystal, GPU L40S)
+    - `green_rosetta.slurm`: all 7 source buckets x 6 protocols x 5 replicates (CPU)
 
 ## Green vs Blue Protocol Comparison
 
@@ -497,7 +490,7 @@ This section documents what matches and what differs.
 | nstruct | 1 (not nstruct=5) | 1 (not nstruct=5) | Yes |
 | Output format | `.pdb.gz` (compressed) | `.pdb.gz` (compressed) | Yes |
 | AMBER parameters | max_iterations=0, tolerance=2.39, stiffness=10.0, max_outer_iterations=3 | Same | Yes |
-| Input types | 6 (af_relaxed, af_unrelaxed, boltz, amber_af, amber_boltz, crystal) | 6 (same) | Yes |
+| Input types | 7 (af_relaxed, af_unrelaxed, amber_af, amber_boltz, amber_crystal, boltz, crystal) | 7 (same) | Yes |
 | Crystal-derived FASTAs | Yes (257/257 verified) | Yes (257/257 verified) | Yes |
 | Crystal structures | Rosetta-cleaned from BM5.5 bound PDBs | Same cleaning pipeline | Yes |
 | Scoring functions | beta_nov16, REF2015 | beta_nov16, REF2015 | Yes |

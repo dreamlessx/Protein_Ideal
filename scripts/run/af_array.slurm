@@ -8,6 +8,7 @@
 #SBATCH --mem=64G
 #SBATCH --time=48:00:00
 #SBATCH --job-name=af_pi
+#SBATCH --exclude=cn1340
 #SBATCH --output=logs/af_%A_%a.out
 #SBATCH --error=logs/af_%A_%a.err
 

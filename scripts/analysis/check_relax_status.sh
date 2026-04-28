@@ -1,4 +1,6 @@
 #!/bin/bash
+# ARCHIVED 2026-04-27: legacy path/scope; canonical analysis lives in
+# companion repo dreamlessx/Protein_Relax_Pipeline/red_analysis/.
 # Monitor progress of relax jobs
 
 set -euo pipefail

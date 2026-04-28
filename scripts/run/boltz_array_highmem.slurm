@@ -7,6 +7,7 @@
 #SBATCH --cpus-per-task=1
 #SBATCH --mem=256G
 #SBATCH --time=2-00:00:00
+#SBATCH --exclude=cn1340
 #SBATCH --output=logs/boltz_%A_%a.out
 #SBATCH --error=logs/boltz_%A_%a.err
 

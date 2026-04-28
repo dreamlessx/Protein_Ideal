@@ -6,20 +6,22 @@
 #SBATCH --time=72:00:00
 #SBATCH --job-name=green_rosetta
 #SBATCH --array=1-257%50
+#SBATCH --exclude=cn1340
 #SBATCH --output=logs/green_rosetta_%A_%a.out
 #SBATCH --error=logs/green_rosetta_%A_%a.err
 
 # Green benchmarking pipeline: Rosetta relaxation
-# 6 input types x 6 protocols x 5 replicates per target
+# 7 source buckets x 6 protocols x 5 replicates per target
 # Matches Blue's rosetta_relax_v2.slurm protocol exactly for fair comparison
 #
-# Input types:
+# Source buckets:
 #   1. af_relaxed       - AF built-in AMBER relaxed (control)
 #   2. af_unrelaxed     - AF unrelaxed (no AMBER)
 #   3. boltz            - Boltz-1 unrelaxed (no AMBER)
 #   4. amber_af         - Standalone AMBER relaxed AF unrelaxed (test)
 #   5. amber_boltz      - Standalone AMBER relaxed Boltz (test)
 #   6. crystal          - Experimental crystal structure
+#   7. amber_crystal    - Standalone AMBER relaxed crystal
 #
 # Rosetta protocols:
 #   cartesian_beta, cartesian_ref15, dualspace_beta,
@@ -158,6 +160,13 @@ if [[ -f "$CRYSTAL_PDB" ]]; then
     MODEL_LABELS+=("${TARGET}")
 fi
 
+# 7. Standalone AMBER of crystal
+if [[ -f "$D/amber_out/crystal/relaxed.pdb" ]]; then
+    ALL_PDBS+=("$D/amber_out/crystal/relaxed.pdb")
+    SRC_TYPES+=("amber_crystal")
+    MODEL_LABELS+=("${TARGET}")
+fi
+
 shopt -u nullglob
 
 if [[ ${#ALL_PDBS[@]} -eq 0 ]]; then
@@ -166,12 +175,13 @@ if [[ ${#ALL_PDBS[@]} -eq 0 ]]; then
 fi
 
 echo "Found ${#ALL_PDBS[@]} input models for $TARGET"
-echo "  af_relaxed:   $(printf '%s\n' "${SRC_TYPES[@]}" | grep -c '^af_relaxed$' || true)"
-echo "  af_unrelaxed: $(printf '%s\n' "${SRC_TYPES[@]}" | grep -c '^af_unrelaxed$' || true)"
-echo "  boltz:        $(printf '%s\n' "${SRC_TYPES[@]}" | grep -c '^boltz$' || true)"
-echo "  amber_af:     $(printf '%s\n' "${SRC_TYPES[@]}" | grep -c '^amber_af$' || true)"
-echo "  amber_boltz:  $(printf '%s\n' "${SRC_TYPES[@]}" | grep -c '^amber_boltz$' || true)"
-echo "  crystal:      $(printf '%s\n' "${SRC_TYPES[@]}" | grep -c '^crystal$' || true)"
+echo "  af_relaxed:    $(printf '%s\n' "${SRC_TYPES[@]}" | grep -c '^af_relaxed$' || true)"
+echo "  af_unrelaxed:  $(printf '%s\n' "${SRC_TYPES[@]}" | grep -c '^af_unrelaxed$' || true)"
+echo "  boltz:         $(printf '%s\n' "${SRC_TYPES[@]}" | grep -c '^boltz$' || true)"
+echo "  amber_af:      $(printf '%s\n' "${SRC_TYPES[@]}" | grep -c '^amber_af$' || true)"
+echo "  amber_boltz:   $(printf '%s\n' "${SRC_TYPES[@]}" | grep -c '^amber_boltz$' || true)"
+echo "  crystal:       $(printf '%s\n' "${SRC_TYPES[@]}" | grep -c '^crystal$' || true)"
+echo "  amber_crystal: $(printf '%s\n' "${SRC_TYPES[@]}" | grep -c '^amber_crystal$' || true)"
 
 # ========================= RUN RELAXATION =========================
 for i in "${!ALL_PDBS[@]}"; do

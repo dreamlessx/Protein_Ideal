@@ -101,6 +101,12 @@ def main():
             out = os.path.join(amber_dir, f"boltz_model_{i}", "relaxed.pdb")
             jobs.append(("boltz", f"model_{i}", pdb, out))
 
+    # --- Crystal structure ---
+    crystal_pdb = os.path.join(target_dir, f"{target}.pdb")
+    if os.path.exists(crystal_pdb):
+        out = os.path.join(amber_dir, "crystal", "relaxed.pdb")
+        jobs.append(("crystal", "crystal", crystal_pdb, out))
+
     if not jobs:
         print(f"No PDBs found for {target}")
         sys.exit(0)

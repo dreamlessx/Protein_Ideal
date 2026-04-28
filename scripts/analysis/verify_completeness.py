@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# ARCHIVED 2026-04-27: legacy path/scope; canonical analysis lives in
+# companion repo dreamlessx/Protein_Relax_Pipeline/red_analysis/.
 """
 Verify completeness of relaxed protein structures and sort into analysis/todo folders.
 

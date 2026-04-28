@@ -1,4 +1,6 @@
 // ... 404 more lines (total: 404)
+# Project Status
+
 ## 2026-04-27 100% Data Lock
 
 Companion repo `dreamlessx/Protein_Relax_Pipeline` reached full data lock:
@@ -14,8 +16,8 @@ Companion repo `dreamlessx/Protein_Relax_Pipeline` reached full data lock:
 
 Protein-Protein Complex Relaxation Benchmark using Docking Benchmark 5.5 (BM5.5).
 Benchmarking AlphaFold 2.3.2 and Boltz-1 predictions against experimental crystal structures,
-with relaxation across 6 Rosetta protocols applied to 6 input types (AF relaxed, AF unrelaxed,
-Boltz, standalone AMBER of AF, standalone AMBER of Boltz, crystal). Green pipeline independently
+with relaxation across 6 Rosetta protocols applied to 7 source buckets (af_relaxed, af_unrelaxed,
+amber_af, amber_boltz, amber_crystal, boltz, crystal). Green pipeline independently
 verifies Blue's protocol with matched parameters.
 
 **Lab**: Meiler Lab, Vanderbilt University
@@ -24,16 +26,9 @@ verifies Blue's protocol with matched parameters.
 
 ## Dataset: PP Docking Benchmark 5.5
 
-- **Total complexes in BM5.5**: 257 (all active — 11 OOM targets recovered via FASTA dedup)
+- **Total complexes in BM5.5**: 257 (all active, 11 OOM targets recovered via FASTA dedup)
 - **FASTA sequences obtained**: 257/257
 - **Boltz input prepared**: 257/257 (11 use deduplicated unique-chain FASTAs)
-
-### Previous Runs (Original Pipeline)
-
-- **Successfully predicted (AF + Boltz)**: 111 targets
-  - `af_completed/`: 66 targets (fully done)
-  - `afset/`: 45 targets (Boltz done, AF in progress)
-- **Relaxation benchmark subset**: 20 proteins (in `test/`)
 
 ### Full BM5.5 Run (Current - protein_ideal_test/)
 
@@ -45,38 +40,35 @@ verifies Blue's protocol with matched parameters.
   - All FASTAs (AF + Boltz), AF predictions, and crystal structures use identical chain sets per target
   - Root cause of original 11 OOM failures: `boltz_input.fasta` listed all physical chain copies
     (quadratic attention scaling). Dedup to unique sequences resolved all OOMs on L40S 48GB
-- **FASTA strategy**: Crystal-derived sequences (not UniProt full-length) — see [FASTA Strategy](#fasta-strategy-crystal-derived-vs-uniprot-full-length)
-- **AlphaFold relaxed (built-in AMBER)**: **256/257 complete** — 5 ranked (AMBER-relaxed) per target. 1KTZ re-running with template workaround (`max_template_date=1900-01-01`), job 9373163 (A6000 required — L40S incompatible with AF2.3.2 CUDA/JAX)
-- **AlphaFold unrelaxed**: **256/257 complete** — 5 unrelaxed per target (same AF run as relaxed)
-- **Boltz-1**: **257/257 COMPLETE** — re-run with deduplicated crystal-derived FASTAs (job 9324391), zero failures
-- **Crystal structures**: **257/257 COMPLETE** — Rosetta-cleaned from BM5.5 bound PDBs
+- **FASTA strategy**: Crystal-derived sequences (not UniProt full-length); see [FASTA Strategy](#fasta-strategy-crystal-derived-vs-uniprot-full-length)
+- **AlphaFold relaxed (built-in AMBER)**: **257/257 COMPLETE**, 5 ranked (AMBER-relaxed) per target
+- **AlphaFold unrelaxed**: **257/257 COMPLETE**, 5 unrelaxed per target (same AF run as relaxed)
+- **Boltz-1**: **257/257 COMPLETE**, re-run with deduplicated crystal-derived FASTAs, zero failures
+- **Crystal structures**: **257/257 COMPLETE**, Rosetta-cleaned from BM5.5 bound PDBs
 - **FASTAs**: All crystal-derived, verified uniform: AF == Boltz == Crystal (257/257)
-- **Old predictions**: backed up as `af_out_old_uniprot/` and `boltz_out_dir_old_uniprot/`
 - **AF config**: `--nouse_gpu_relax --models_to_relax=all` (AMBER relax all 5 models on CPU)
 - **AF output**: 10 models per target (5 AMBER-relaxed `ranked_*.pdb` + 5 unrelaxed `unrelaxed_model_*.pdb`)
 - **Database preset**: Full databases (HHblits + BFD + UniRef30), `reduced_dbs` fallback on HHblits failure
-- **Input verification**: Green's FASTAs verified against authoritative set — 0 sequence mismatches (251/251)
+- **Input verification**: Green's FASTAs verified against authoritative set, 0 sequence mismatches (251/251)
 - **DNA/RNA policy**: DNA/RNA chains excluded from all prediction FASTAs (protein-only). Fixed 3P57 and 1H9D.
-- **Disk usage**: ~10 GB (cleaned 31 GB of AF stderr logs; under 50 GB hard limit)
 
 ## Standalone AMBER Relaxation (GPU)
 
-- **Job 9372421** (`green_amber`): array 1-257, 10 concurrent, GPU partition (L40S)
-- **Progress**: **~235/257 complete**, 0 failures
-- **Inputs**: AF unrelaxed (5 models) + Boltz (5 models) = 10 models per target
+- **Standalone AMBER (AF + Boltz + crystal): 257/257 COMPLETE**
+- **Inputs**: AF unrelaxed (5 models) + Boltz (5 models) + crystal (1 model) per target
 - **Purpose**: test standalone AMBER relaxation vs AF's built-in AMBER relaxation
 - **AMBER parameters**: `max_iterations=0`, `tolerance=2.39`, `stiffness=10.0`, `max_outer_iterations=3`
 - **Compute**: GPU-accelerated OpenMM on L40S (p_meiler_acc)
 
 ## Rosetta Relaxation (CPU)
 
-- **Job 9373165** (`green_rosetta`): array 1-257, 50 concurrent, depends on AMBER + 1KTZ AF completion
+- **Rosetta Green pipeline: 100.000% (208,170 / 208,170 .pdb.gz exact)**
 - **Wall time**: 72 hours per task
 - **Partition**: `batch` (CPU), account `p_csb_meiler`
 
-### 6 Rosetta Input Types
+### 7 Rosetta Input Types
 
-Each target produces up to 26 input models for Rosetta relaxation:
+Each target produces up to 27 input models for Rosetta relaxation:
 
 | # | Input Type | Source | Models per Target | Description |
 |---|-----------|--------|-------------------|-------------|
@@ -86,8 +78,9 @@ Each target produces up to 26 input models for Rosetta relaxation:
 | 4 | `amber_af` | Standalone AMBER of AF unrelaxed | 5 | Standalone AMBER relaxation of AF unrelaxed |
 | 5 | `amber_boltz` | Standalone AMBER of Boltz | 5 | Standalone AMBER relaxation of Boltz |
 | 6 | `crystal` | `cleaned/*.pdb` | 1 | Experimental crystal structure (baseline) |
+| 7 | `amber_crystal` | Standalone AMBER on crystal | 1 | Standalone AMBER relaxation of crystal |
 
-**Total**: 6 input types x 5 models each (+ 1 crystal) = **26 models per target**
+**Total**: 27 models per target (5+5+5+5+5+1+1)
 
 ### 6 Rosetta Protocols
 
@@ -120,8 +113,8 @@ Each input model is relaxed with 6 protocols, each run 5 times:
 ### Rosetta Scale
 
 - **6 protocols x 5 replicates = 30 Rosetta runs per model**
-- **26 models per target x 30 runs = ~780 Rosetta runs per target**
-- **257 targets x ~780 runs = ~200,460 total Rosetta relaxations**
+- **27 models per target x 30 runs = 810 Rosetta runs per target**
+- **810 Rosetta runs per target x 257 targets = 208,170 per pipeline; 416,340 combined**
 
 ### Pipeline Design Rationale
 
@@ -136,14 +129,14 @@ Each input model is relaxed with 6 protocols, each run 5 times:
 ### The Problem
 
 RCSB FASTA downloads provide **full-length UniProt canonical sequences**, which include residues
-not resolved in the crystal structure — disordered N/C-termini, flexible loops, signal peptides,
+not resolved in the crystal structure: disordered N/C-termini, flexible loops, signal peptides,
 and transmembrane domains that were removed for crystallization. These extra residues create
 mismatches between the prediction input and the crystal reference used for RMSD evaluation.
 
 When AlphaFold or Boltz predicts a structure from the full-length UniProt sequence, the resulting
 model contains regions that have no counterpart in the crystal structure. RMSD calculations then
-compare apples to oranges: the predicted structure covers residues 1–965 while the crystal only
-resolves residues 217–965, leaving 216 residues in the prediction with no ground truth.
+compare apples to oranges: the predicted structure covers residues 1-965 while the crystal only
+resolves residues 217-965, leaving 216 residues in the prediction with no ground truth.
 
 ### Examples: UniProt vs Crystal-Derived Sequences
 
@@ -158,7 +151,7 @@ resolves residues 217–965, leaving 216 residues in the prediction with no grou
 | **1BUH** | A | 287 aa | 298 aa | **+11** | CDK2 (C-terminal extension unresolved) |
 | **1BUH** | B | 70 aa | 79 aa | **+9** | CksHs1 (N-terminal Met + disordered tail) |
 
-**Worst case: 6A0Z** — The UniProt hemagglutinin sequence is 551 residues (full precursor including
+**Worst case: 6A0Z**: The UniProt hemagglutinin sequence is 551 residues (full precursor including
 signal peptide and transmembrane anchor), but only 270 residues are resolved in the crystal. Predicting
 the full-length sequence would waste compute on 281 residues that cannot be evaluated and would distort
 RMSD by including large disordered regions.
@@ -218,12 +211,10 @@ backups in each target directory. All 257 targets have backups.
 
 ### Status
 
-AF and Boltz **re-runs with crystal-derived FASTAs** are complete:
-- AF: 256/257 complete (job 9324390). 1KTZ re-running (job 9373163) on A6000 with template workaround (`max_template_date=1900-01-01`) — L40S incompatible with AF2.3.2 CUDA/JAX
-- Boltz: 257/257 complete (job 9324391), zero failures
-- Old UniProt-based predictions backed up as `af_out_old_uniprot/` and `boltz_out_dir_old_uniprot/`
-- Standalone AMBER: **~235/257 done** — job 9372421 (`green_amber`), GPU L40S (p_meiler_acc), 0 failures
-- Rosetta relaxation: **pending** — job 9373165 (`green_rosetta`), 6 inputs x 6 protocols x 5 reps, depends on AMBER + 1KTZ AF
+- AF: 257/257 COMPLETE
+- Boltz: 257/257 COMPLETE, zero failures
+- Standalone AMBER: 257/257 COMPLETE (AF + Boltz + crystal)
+- Rosetta Green pipeline: 100.000% (208,170 / 208,170 .pdb.gz exact)
 
 ---
 
@@ -281,43 +272,24 @@ during the bulk download (files already existed).
 
 ## Completion Status
 
-### Relaxation Benchmark (20 proteins) - COMPLETE
+For the 20-target validation subset, see companion repo dreamlessx/Protein_Data_Analysis.
 
-| Category | Expected | Complete | Status |
-|----------|----------|----------|--------|
-| Experimental PDBs | 20 | 20 | Done |
-| AlphaFold predictions (5 ranked per target) | 100 | 100 | Done |
-| Boltz-1 predictions (5 models per target) | 100 | 100 | Done |
-| Experimental relaxed (6 protocols x 5 reps) | 600 | 600 | Done |
-| AF relaxed (5 models x 6 protocols x 5 reps) | 3,000 | 3,000 | Done |
-| Boltz relaxed (5 models x 6 protocols x 5 reps) | 3,000 | 3,000 | Done |
-| **Total** | **6,820** | **6,820** | **Done** |
+### Full BM5.5 Run (257 targets): COMPLETE
 
-### 20 Benchmark Proteins
-
-```
-1AK4  1AKJ  1AVX  1AY7  1AZS
-1BUH  1BVN  1E6E  1EFN  1EWY
-1EXB  1F51  1FCC  1GHQ  1GLA
-1HCF  1JPS  1K74  1VFB  2I25
-```
-
-### Full BM5.5 Run (257 targets) - ROSETTA + AMBER RUNNING
-
-| Step | Status | SLURM Job(s) | Notes |
-|------|--------|-------------|-------|
-| 0. Download BM5.5 | Done | - | 257 complexes (14 non-BM5.5 entries removed from archive) |
-| 1. Clean PDBs | Done | 8824833 | 257/257 cleaned with Rosetta clean_pdb.py |
-| 2. Download FASTAs | Done | - | 249 RCSB + 2 obsolete replacements + 4 PDB-extracted + 2 pre-existing |
-| 3. Organize FASTAs | Done | - | 257 data/{ID}/sequence.fasta |
-| 4. Prepare Boltz input | Done | - | 257 data/{ID}/boltz_input.fasta |
-| 5. AlphaFold 2.3.2 | **256/257 done** | 9324390 + 9373163 (1KTZ retry) | Re-run with crystal-derived FASTAs. 1KTZ re-running with `max_template_date=1900-01-01` on A6000 (L40S incompatible with AF2.3.2) |
-| 6. Boltz-1 v0.4.1 | **Done (257/257)** | 9324391 | Re-run with dedup crystal-derived FASTAs. Zero failures |
-| 7. Standalone AMBER | **~235/257 done** | 9372421 (`green_amber`) | GPU L40S (p_meiler_acc), 10 models/target, 0 failures |
-| 8. Rosetta relaxation | **Pending** | 9373165 (`green_rosetta`) | 6 inputs x 6 protocols x 5 reps, depends on AMBER + 1KTZ AF |
-| 9. Built-in AMBER | **Done (in Step 5)** | - | 256/257 have 5 ranked (AMBER-relaxed) PDBs |
-| 10. MolProbity validation | Waiting on Rosetta | - | Phenix + reduce |
-| 11. Collect metrics | Waiting on Rosetta | - | PyMOL RMSD + Rosetta energies |
+| Step | Status | Notes |
+|------|--------|-------|
+| 0. Download BM5.5 | COMPLETE | 257 complexes (14 non-BM5.5 entries removed from archive) |
+| 1. Clean PDBs | COMPLETE | 257/257 cleaned with Rosetta clean_pdb.py |
+| 2. Download FASTAs | COMPLETE | 249 RCSB + 2 obsolete replacements + 4 PDB-extracted + 2 pre-existing |
+| 3. Organize FASTAs | COMPLETE | 257 data/{ID}/sequence.fasta |
+| 4. Prepare Boltz input | COMPLETE | 257 data/{ID}/boltz_input.fasta |
+| 5. AlphaFold 2.3.2 | COMPLETE | 257/257, 5 ranked + 5 unrelaxed per target |
+| 6. Boltz-1 v0.4.1 | COMPLETE | 257/257 with deduplicated crystal-derived FASTAs, zero failures |
+| 7. Standalone AMBER | COMPLETE | 257/257 (AF + Boltz + crystal); GPU L40S (p_meiler_acc) |
+| 8. Rosetta relaxation | COMPLETE | 100.000% (208,170 / 208,170); 7 source buckets x 6 protocols x 5 reps |
+| 9. Built-in AMBER | COMPLETE | 257/257 have 5 ranked (AMBER-relaxed) PDBs |
+| 10. MolProbity validation | COMPLETE | Canonical analysis in companion repo `dreamlessx/Protein_Relax_Pipeline/red_analysis/` |
+| 11. Collect metrics | COMPLETE | See companion repo `dreamlessx/Protein_Relax_Pipeline/red_analysis/` |
 
 ## Relaxation Protocols
 
@@ -339,7 +311,7 @@ during the bulk download (files already existed).
 | 5 | normal_beta | Torsion | beta_nov16 | `-beta_nov16 -score:weights beta_nov16` |
 | 6 | normal_ref15 | Torsion | REF2015 | `-score:weights ref2015` |
 
-### Applied To (6 Input Types)
+### Applied To (7 Source Buckets)
 
 | # | Input Type | Models | Description |
 |---|-----------|--------|-------------|
@@ -349,9 +321,10 @@ during the bulk download (files already existed).
 | 4 | amber_af | 5 | Standalone AMBER relaxation of AF unrelaxed |
 | 5 | amber_boltz | 5 | Standalone AMBER relaxation of Boltz |
 | 6 | crystal | 1 | Experimental crystal structure (baseline) |
+| 7 | amber_crystal | 1 | Standalone AMBER relaxation of crystal |
 
-**Total per target**: 26 models x 6 protocols x 5 replicates = **~780 Rosetta relaxations**
-**Total across benchmark**: 257 targets x ~780 = **~200K Rosetta relaxations**
+**Total per target**: 27 models x 6 protocols x 5 replicates = 810 Rosetta runs per target
+**Total across benchmark**: 810 Rosetta runs per target x 257 targets = 208,170 per pipeline; 416,340 combined
 
 ## Key Findings (Preliminary)
 
@@ -370,6 +343,11 @@ during the bulk download (files already existed).
    delete MSAs, pickles, and intermediate PDBs (keeps only ranked PDBs and
    ranking_debug.json) to stay within 30GB disk quota.
 
+## Resolved Issues
+
+- 1ACB + 1ATN AMBER-crystal: resolved via v5 chain-split preprocessing.
+- ACCRE node cn1340 excluded from SLURM jobs (1,614 failures traced; `--exclude=cn1340` directive on all production scripts).
+
 ## ACCRE Directory Layout
 
 ```
@@ -378,16 +356,13 @@ during the bulk download (files already existed).
 │   ├── Protein_Ideal/        # Cloned repo
 │   └── benchmarking/         # Pipeline working directory
 │       ├── merged/           # 257 merged complex PDBs
-│       ├── cleaned/          # Rosetta-cleaned PDBs (in progress)
+│       ├── cleaned/          # 257 Rosetta-cleaned PDBs (final)
 │       ├── fasta/            # 257 downloaded FASTAs
 │       ├── data/             # 257 per-PDB directories (sequence.fasta + boltz_input.fasta)
 │       ├── af_dirlist.txt    # 257 target paths for SLURM arrays
 │       ├── af_array.slurm    # AlphaFold array job
 │       ├── boltz_array.slurm # Boltz-1 array job
 │       └── clean_pdbs.slurm  # PDB cleaning job
-├── af_completed/             # 66 targets, fully predicted (AF + Boltz)
-├── afset/                    # 45 targets, AF in progress
-├── test/                     # 20-protein relaxation benchmark (6,820 structures)
 └── scripts/                  # Original SLURM scripts
 ```
 
@@ -402,13 +377,11 @@ during the bulk download (files already existed).
 | Python | 3.8.18 | AF2 conda env (af232) |
 | CUDA | 12.6 | Driver 560.35.05 |
 
-## Validation Pipeline (TODO)
+## Validation Pipeline: COMPLETE
 
-- [ ] MolProbity validation on full 257-target run
-- [ ] PoseBusters validation
-- [ ] Statistical analysis and figures
-- [ ] Manuscript preparation
+Canonical analysis lives in companion repo `dreamlessx/Protein_Relax_Pipeline/red_analysis/`.
 
 ## Related Repositories
 
-- [Protein_Relax_Pipeline](https://github.com/dreamlessx/Protein_Relax_Pipeline) - Contains the 20-protein test subset with all 6,820 structures
+- [Protein_Relax_Pipeline](https://github.com/dreamlessx/Protein_Relax_Pipeline): Blue companion pipeline at 100% lock (snapshot 2026-04-27a, 416,340/416,340 Rosetta MolProbity rows).
+- [Protein_Data_Analysis](https://github.com/dreamlessx/Protein_Data_Analysis): 20-target validation subset (6,820 structures).
