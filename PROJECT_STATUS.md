@@ -1,13 +1,15 @@
 // ... 404 more lines (total: 404)
 # Project Status
 
-## 2026-04-28 Stages B + C complete (under snapshot 2026-04-27a)
+## 2026-04-28 Stages B + C + B6 + B7 + B8 complete (snapshot 2026-04-27a)
 
-Schema-reserved tables now populated under the same snapshot ID. Final state:
+Every schema-defined table now populated; every silently-dropped row logged for traceability. Final state:
 - **rosetta_metrics**: 416,340 (locked, unchanged)
-- **prerosetta_metrics**: 13,364 (= 13,344 from `combined_molprobity.tsv` + 20 Stage C Blue crystal backfill)
-- **tm_scores**: 104,765 (12,065 pre-Rosetta + 92,700 post-Rosetta)
-- **targets**: 257 with full metadata (difficulty + category from zlab; n_chains + n_residues from BioPython)
+- **prerosetta_metrics**: 13,364 (13,344 from TSV + 20 Stage C Blue crystal backfill)
+- **tm_scores**: 104,765 (12,065 pre + 92,700 post)
+- **rosetta_energy**: 183,373 (schema-extension table; 44.04% coverage of rosetta_metrics; upstream-incomplete with amber_crystal absent in both pipelines, gaps logged to qc_quarantine)
+- **targets**: 257 with full metadata + `parent_pdb_id` for the 4 non-standard (BAAD/BOYV/BP57/CP57)
+- **qc_quarantine**: 240,451 audit rows (239,472 coverage_gap + 979 exact_duplicate)
 - 0 orphan rows, qc_status = pass
 
 Live SQLite + raw TSVs published as `db-2026-04-27a-supp` Release on `dreamlessx/Protein_Relax_Pipeline`.
