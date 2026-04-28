@@ -1,6 +1,21 @@
 // ... 404 more lines (total: 404)
 # Project Status
 
+## 2026-04-28 Stages B + C complete (under snapshot 2026-04-27a)
+
+Schema-reserved tables now populated under the same snapshot ID. Final state:
+- **rosetta_metrics**: 416,340 (locked, unchanged)
+- **prerosetta_metrics**: 13,364 (= 13,344 from `combined_molprobity.tsv` + 20 Stage C Blue crystal backfill)
+- **tm_scores**: 104,765 (12,065 pre-Rosetta + 92,700 post-Rosetta)
+- **targets**: 257 with full metadata (difficulty + category from zlab; n_chains + n_residues from BioPython)
+- 0 orphan rows, qc_status = pass
+
+Live SQLite + raw TSVs published as `db-2026-04-27a-supp` Release on `dreamlessx/Protein_Relax_Pipeline`.
+
+Loader: `Protein_Relax_Pipeline/db/scripts/build_db_supplements.py` (idempotent companion to `build_db.py`).
+
+`green_data_analysis/` in this repo holds the GREEN-pipeline-specific bars + scatter figures (per-metric: clashscore, MP score, rama outliers, rama favored, rota outliers, cbeta outliers, RMS bonds, RMS angles, energy).
+
 ## 2026-04-27 100% Data Lock
 
 Companion repo `dreamlessx/Protein_Relax_Pipeline` reached full data lock:
