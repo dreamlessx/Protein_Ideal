@@ -1,4 +1,14 @@
-# Project Status
+// ... 404 more lines (total: 404)
+## 2026-04-27 100% Data Lock
+
+Companion repo `dreamlessx/Protein_Relax_Pipeline` reached full data lock:
+- 416,340 / 416,340 Rosetta MolProbity metric rows (100.000% coverage)
+- 0 gap cells, 0 missing rows, 0 NaN
+- DB snapshot 2026-04-27a, qc_status = pass
+- 663 exact-duplicate rows + 27 legacy-source rows filtered at ingest
+- See `Protein_Relax_Pipeline/red_analysis/` for canonical analysis code, tables, figures, pptx
+- See `Protein_Relax_Pipeline/db/` for SQLite database schema + build script
+
 
 ## Overview
 
