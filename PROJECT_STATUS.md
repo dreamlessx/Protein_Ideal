@@ -1,13 +1,13 @@
 // ... 404 more lines (total: 404)
 # Project Status
 
-## 2026-04-28 Snapshot 2026-04-27a finalized — 100% coverage every fact table
+## 2026-04-28 Snapshot 2026-04-27a finalized: 100% coverage every fact table
 
 Final state under the locked snapshot:
 - **rosetta_metrics**: 416,340 (locked)
 - **prerosetta_metrics**: 13,364 (13,344 + 20 Stage C Blue crystal backfill)
 - **tm_scores**: 104,765 (12,065 pre + 92,700 post)
-- **rosetta_energy**: **416,340 — 100% coverage** of rosetta_metrics; recovered the previously-missed 232,967 cells via patched extractor (sidecar + PDB POSE_ENERGIES_TABLE fallback, plus the missing `amber_crystal` classification branch)
+- **rosetta_energy**: **416,340 (100% coverage)** of rosetta_metrics; recovered the previously-missed 232,967 cells via patched extractor (sidecar + PDB POSE_ENERGIES_TABLE fallback, plus the missing `amber_crystal` classification branch)
 - **targets**: 257 with full metadata + `parent_pdb_id` for the 4 non-standard
 - **qc_quarantine**: 0 (clean)
 - 0 orphans, 0 gaps, qc_status = pass
@@ -20,8 +20,8 @@ Loader: `Protein_Relax_Pipeline/db/scripts/build_db_supplements.py` (idempotent 
 
 ## 2026-04-27 100% Data Lock
 
-Companion repo `dreamlessx/Protein_Relax_Pipeline` reached full data lock:
-- 416,340 / 416,340 Rosetta MolProbity metric rows (100.000% coverage)
+Blue companion repo `dreamlessx/Protein_Relax_Pipeline` reached full data lock:
+- 416,340 / 416,340 combined Blue+Green Rosetta MolProbity metric rows (100.000% coverage)
 - 0 gap cells, 0 missing rows, 0 NaN
 - DB snapshot 2026-04-27a, qc_status = pass
 - 663 exact-duplicate rows + 27 legacy-source rows filtered at ingest
@@ -34,8 +34,7 @@ Companion repo `dreamlessx/Protein_Relax_Pipeline` reached full data lock:
 Protein-Protein Complex Relaxation Benchmark using Docking Benchmark 5.5 (BM5.5).
 Benchmarking AlphaFold 2.3.2 and Boltz-1 predictions against experimental crystal structures,
 with relaxation across 6 Rosetta protocols applied to 7 source buckets (af_relaxed, af_unrelaxed,
-amber_af, amber_boltz, amber_crystal, boltz, crystal). Green pipeline independently
-verifies Blue's protocol with matched parameters.
+amber_af, amber_boltz, amber_crystal, boltz, crystal). This repo is the Green pipeline (matched-parameters re-run); Blue lives in companion repo `Protein_Relax_Pipeline` and Phase 1 pilot (20 proteins) lives in `Protein_Data_Analysis`.
 
 **Lab**: Meiler Lab, Vanderbilt University
 **Cluster**: ACCRE (csb_gpu_acc)

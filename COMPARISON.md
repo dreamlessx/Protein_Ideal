@@ -193,7 +193,7 @@ is GPU vs CPU execution, which produces numerically equivalent results.
 | `norm_beta` | `-beta_nov16 -score:weights beta_nov16` |
 | `norm_ref15` | `-score:weights ref2015` |
 
-### Common Rosetta Flags (Pipeline, verified)
+### Common Rosetta Flags (Pipeline, Verified)
 
 ```
 -ignore_zero_occupancy false
@@ -407,23 +407,7 @@ The most significant methodological differences that could affect results:
    All 7 targets now have full 10 models (5 ranked + 5 unrelaxed) after FASTA fix.
    Both pipelines match on all 7 AMBER targets.
 
-10. **Boltz GPU tiering**: Pipeline uses single L40S tier. Protein_Ideal stratifies by
-   residue count:
-
-   | Tier | GPU | Samples | Residue Range | Targets | Result |
-   |------|-----|---------|---------------|---------|--------|
-   | Standard | L40S 48GB | 5 | <1300 | 234 | 234/234 |
-   | Highmem | H100 80GB | 5 | 1300-2200 | 14 | 12/14 |
-   | XL | H100 80GB | 1 | >2200 | 11 | 2/11 |
-
-   9 targets with >3,000 total residues permanently OOMed (0/5 models). 2 additional
-   targets (1GXD, 3EO1) in the 2,200-3,000 range produced only 1/5 models (OOM at 5
-   diffusion samples, succeeded at 1). All 11 excluded from the benchmark to maintain
-   a consistent dataset where every target has 5 AF + 5 Boltz models.
-
-   All 257 BM5.5 targets active (11 prior OOM targets resolved via FASTA dedup).
-   Originally excluded (full OOM): 1DE4, 1K5D, 1N2C, 1WDW, 1ZM4, 3BIW, 3L89, 4GXU, 6EY6.
-   Originally excluded (partial OOM): 1GXD, 3EO1.
+10. **Boltz GPU tiering**: Historically Protein_Ideal stratified Boltz across L40S/H100/XL tiers to push the largest 11 multi-chain targets through, with mixed success (9 full OOM, 2 partial OOM). FASTA deduplication (collapsing duplicate chain copies in homo-multimers) eliminated the OOMs entirely; quadratic attention now scales on unique sequences only. Current state: all 257 targets run uniformly on the standard L40S 48GB tier with 5 diffusion samples. The H100 highmem and XL tiers are no longer needed.
 
 11. **DNA/RNA exclusion**: Both pipelines exclude DNA/RNA chains from prediction FASTAs.
     BM5.5 is a protein-protein benchmark; neither AF nor Boltz supports nucleic acids.
@@ -495,19 +479,7 @@ This section documents what matches and what differs.
 | Crystal structures | Rosetta-cleaned from BM5.5 bound PDBs | Same cleaning pipeline | Yes |
 | Scoring functions | beta_nov16, REF2015 | beta_nov16, REF2015 | Yes |
 
-**Common Rosetta flags (identical between Green and Blue):**
-```
--ignore_zero_occupancy false
--nstruct 1
--no_nstruct_label
--out:pdb_gz
--flip_HNQ
--fa_max_dis 9.0
--optimization:default_max_cycles 200
--out:levels all:warning
--out::suffix "_r${r}"
--scorefile relax.fasc
-```
+Common Rosetta flags are identical between Green and Blue. See the [Common Rosetta Flags](#common-rosetta-flags-pipeline-verified) block earlier in this document for the verified list.
 
 ### Known Differences
 
@@ -527,3 +499,7 @@ This section documents what matches and what differs.
 while Blue uses GPU relaxation (`--use_gpu_relax`). Both produce numerically equivalent results.
 The standalone AMBER relaxation (applied to AF unrelaxed and Boltz models) uses the same
 parameters in both pipelines.
+
+## Summary
+
+Green's matched-parameter execution reproduces Blue's three findings under snapshot 2026-04-27a (locked at 100.000% across both pipelines, 416,340 / 416,340 combined Rosetta MolProbity rows). AMBER fixes local geometry without touching global fold (clashscore Cliff's d = -0.99 at TM Cliff's d = -0.01). Crystal carries the worst pre-Rosetta MolProbity (idealization artifact). `dualspace_beta` wins integrated MolProbity at small TM cost. Canonical figures, tables, and analysis live in `Protein_Relax_Pipeline/red_analysis/`.

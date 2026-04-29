@@ -1,1111 +1,157 @@
-// ... 1089 more lines (total: 1089)
-# Protein Ideal: BM5.5 Relaxation Benchmark Pipeline
+# Protein_Ideal: Green Pipeline (matched-parameters re-run of BM5.5 docking-relaxation)
 
-## 2026-04-27 100% Data Lock
+Independent verification of the Blue pipeline at [`Protein_Relax_Pipeline`](https://github.com/dreamlessx/Protein_Relax_Pipeline). Green re-runs Blue's full pipeline from scratch with matched parameters: same 257 BM5.5 targets, same 27 input structures per target, same AMBER force field and AlphaFold/Boltz versions, same six Rosetta protocols with identical flags, same five replicates per protocol. The locked DB unifies Blue + Green under snapshot 2026-04-27a.
 
-Companion repo `dreamlessx/Protein_Relax_Pipeline` reached full data lock:
-- 416,340 / 416,340 Rosetta MolProbity metric rows (100.000% coverage)
-- 0 gap cells, 0 missing rows, 0 NaN
-- DB snapshot 2026-04-27a, qc_status = pass
-- 663 exact-duplicate rows + 27 legacy-source rows filtered at ingest
-- See `Protein_Relax_Pipeline/red_analysis/` for canonical analysis code, tables, figures, pptx
-- See `Protein_Relax_Pipeline/db/` for SQLite database schema + build script
-
-
-A complete, step-by-step guide to reproducing the protein-protein complex structure prediction and relaxation benchmark using the Protein-Protein Docking Benchmark 5.5 (BM5.5).
-
-This document traces every script, validates each step, and provides verification checkpoints so you can confirm correctness at each stage.
-
-> **FASTA Strategy Note**: This pipeline uses **crystal-derived sequences** extracted from
-> BM5.5 bound-structure PDB ATOM records, **not** full-length UniProt canonical sequences from
-> RCSB. UniProt FASTAs include residues not resolved in the crystal structure (disordered termini,
-> signal peptides, etc.), which creates mismatches for RMSD evaluation. Crystal-derived sequences
-> ensure predictions cover exactly the experimentally resolved region. For some targets the
-> difference is substantial (e.g., 6A0Z: 705 crystal vs 989 UniProt residues). Homo-multimeric
-> targets (119/257) are further deduplicated to unique sequences only. See
-> [PROJECT_STATUS.md](PROJECT_STATUS.md) for full details.
+> **Where to look for canonical analysis.** Figures, tables, statistical analyses, and the three paper findings live in `Protein_Relax_Pipeline/red_analysis/`. This repo contains Green's pipeline scripts and Green-specific output (`green_data_analysis/`).
 
 ---
 
-## Table of Contents
+## What Blue + Green together accomplish
 
-1. [Prerequisites](#1-prerequisites)
-2. [Step 0: Download BM5.5 Dataset](#2-step-0-download-bm55-dataset)
-3. [Step 1: Clean PDB Structures](#3-step-1-clean-pdb-structures)
-4. [Step 2: Download FASTA Sequences](#4-step-2-download-fasta-sequences)
-5. [Step 3: Organize FASTAs](#5-step-3-organize-fastas)
-6. [Step 4: Prepare Boltz-1 Input](#6-step-4-prepare-boltz-1-input)
-7. [Step 5: Run AlphaFold 2.3.2](#7-step-5-run-alphafold-232)
-8. [Step 6: Run Boltz-1](#8-step-6-run-boltz-1)
-9. [Step 7: Organize Predictions for Relaxation](#9-step-7-organize-predictions-for-relaxation)
-10. [Step 8: Run Rosetta Relaxation](#10-step-8-run-rosetta-relaxation)
-11. [Step 9: MolProbity Validation](#11-step-9-molprobity-validation)
-12. [Step 10: Collect Metrics](#12-step-10-collect-metrics)
-13. [Pipeline Audit](#13-pipeline-audit)
-14. [Troubleshooting](#14-troubleshooting)
+Two independent pipelines run from the same FASTAs through the same prediction methods (AlphaFold 2.3.2, Boltz-1 v0.4.1) and the same relaxation matrix (1 AMBER + 6 Rosetta protocols × 5 reps × 27 input structures × 257 targets), producing 208,170 cells per pipeline. The DB unifies them as 416,340 `rosetta_metrics` rows under snapshot 2026-04-27a, with `pipeline_id ∈ {blue, green}` distinguishing source.
 
----
+**Blue/Green agreement** (locked snapshot):
 
-## 1. Prerequisites
+| Metric | Pearson r | n |
+|---|---|---|
+| Pre-Rosetta TM | 0.997 | 1,128 |
+| Pre-Rosetta RMSD | 0.994 | 1,128 |
+| Post-Rosetta TM | 0.999 | 60 |
+| Per-source clashscore | 0.867 to 0.991 | 257 |
+| Per-source MP score | 0.941 to 0.984 | 257 |
 
-### Software Requirements
+The Green run statistically reproduces Blue. All three paper findings (AMBER fixes local geometry, crystal worst MolProbity, dualspace_beta wins integrated MP) replicate independently.
 
-| Software | Version | Installation |
-|----------|---------|-------------|
-| Python | 3.10+ | System or conda |
-| AlphaFold | 2.3.2 | [GitHub](https://github.com/deepmind/alphafold) or cluster module |
-| Boltz-1 | 0.4.1 | `pip install boltz` or cluster module |
-| Rosetta | 3.15 | [RosettaCommons](https://www.rosettacommons.org/) |
-| Phenix | Latest | [Phenix](https://www.phenix-online.org/) |
-| Reduce | Latest | Included with Phenix or [SBGrid](https://sbgrid.org/) |
-| PyMOL | 2.x+ | [PyMOL](https://pymol.org/) |
-| requests | Latest | `pip install requests` |
+## Three findings (full numbers in `Protein_Relax_Pipeline/red_analysis/PAPER_FINDINGS.md`)
 
-### ACCRE-Specific Setup (Vanderbilt)
+1. **AMBER fixes local geometry without touching global fold.** Clashscore Cliff's d = -0.99 at TM Cliff's d = -0.01. AMBER improves MolProbity for 257/257 AlphaFold and 256/257 Boltz targets.
+2. **Crystal structures carry the worst pre-Rosetta MolProbity.** Crystal clashscore 13.85 vs AlphaFold-relaxed 2.82 vs AMBER(Boltz) 1.60. Idealization artifact, not failure.
+3. **dualspace_beta wins integrated MolProbity at small TM cost.** beta_nov16 dominates ref2015 on MP/clash/Rama-favored across 40-42 of 42 (pipeline, source, move-set) triples.
 
-```bash
-# AlphaFold 2.3.2
-AF2_MINICONDA=/sb/apps/alphafold232/miniconda3
-AF2_REPO=/sb/apps/alphafold232/alphafold
-AF2_DATADIR=/csbtmp/alphafold-data.230
+## DB state under snapshot 2026-04-27a (qc_status = pass)
 
-# Boltz-1 v0.4.1
-BOLTZ_MINICONDA=/sb/apps/boltz1-v0.4.1/miniconda3
+| Table | Rows |
+|---|---|
+| `rosetta_metrics` | 416,340 |
+| `prerosetta_metrics` | 13,364 |
+| `tm_scores` | 104,765 (12,065 pre + 92,700 post) |
+| `rosetta_energy` | 416,340 (100% coverage) |
+| `targets` | 257 with full metadata + parent_pdb_id for 4 non-standard |
+| `qc_quarantine` | 0 |
 
-# Rosetta 3.15
-RELAX=/data/p_csb_meiler/apps/rosetta/rosetta-3.15/main/source/bin/relax.linuxgccrelease
-ROSETTA_DB=/data/p_csb_meiler/apps/rosetta/rosetta-3.15/main/database
-CLEAN_SCRIPT=/data/p_csb_meiler/apps/rosetta/rosetta-3.15/main/tools/protein_tools/scripts/clean_pdb.py
-
-# MolProbity (SBGrid)
-REDUCE=/programs/x86_64-linux/system/sbgrid_bin/reduce
-PHENIX=/programs/x86_64-linux/system/sbgrid_bin/phenix.molprobity
-```
-
-### Directory Structure
-
-Create your working directory:
-```bash
-mkdir -p benchmarking/{merged,cleaned,fasta,data,structures,test}
-cd benchmarking
-```
+DB and raw TSVs in the [`db-2026-04-27a-supp`](https://github.com/dreamlessx/Protein_Relax_Pipeline/releases/tag/db-2026-04-27a-supp) Release on the primary repo.
 
 ---
 
-## 2. Step 0: Download BM5.5 Dataset
+## Differences between Blue and Green
 
-### Source
+Both pipelines use identical Rosetta flags, identical AMBER parameters, the same FASTAs, and the same prediction methods. Differences are operational, not scientific.
 
-The Protein-Protein Docking Benchmark 5.5 is maintained by the Weng Lab at UMass Medical School.
+| Aspect | Blue | Green |
+|---|---|---|
+| ACCRE root | `/data/p_csb_meiler/agarwm5/protein_pipeline/` | `/data/p_csb_meiler/agarwm5/protein_ideal_test/` |
+| Job prefix | `blue_` | `green_` |
+| Rosetta version | 3.15 | 3.15 |
+| Script architecture | Single-stage SLURM arrays | Modular per-step scripts in `scripts/run/`, `scripts/relaxation/`, `scripts/validation/`, `scripts/analysis/`, `scripts/data_preparation/` |
+| AMBER (crystal) compute | GPU OpenMM | GPU OpenMM (matched) |
+| Per-target output count | 810 Rosetta runs | 810 Rosetta runs (matched) |
 
-**Download page:** https://zlab.umassmed.edu/benchmark/
-
-### What to Download
-
-The benchmark provides:
-- **Bound structures**: crystal structures of the complex
-- **Unbound structures**: individual partner structures crystallized separately
-- **Metadata**: complex categories (Antibody-Antigen, Enzyme-Inhibitor, etc.)
-
-### Download Steps
-
-```bash
-# Download the benchmark tables and structures
-# The exact URL may change; check the Weng Lab benchmark page
-wget https://zlab.umassmed.edu/benchmark/benchmark5.5.tgz
-tar -xzf benchmark5.5.tgz
-
-# The archive contains structures in the format:
-#   {PDBID}_l_b.pdb : Ligand, bound conformation
-#   {PDBID}_l_u.pdb : Ligand, unbound conformation
-#   {PDBID}_r_b.pdb : Receptor, bound conformation
-#   {PDBID}_r_u.pdb : Receptor, unbound conformation
-```
-
-**Naming convention:**
-| Suffix | Meaning |
-|--------|---------|
-| `_l_` | Ligand (smaller binding partner) |
-| `_r_` | Receptor (larger binding partner) |
-| `_b` | Bound conformation (from the complex crystal) |
-| `_u` | Unbound conformation (separate crystal structure) |
-
-### Create Merged Complexes
-
-For this benchmark, we need the **complete complex** structures (both chains together). If you downloaded the split bound structures, merge them:
-
-```bash
-# Move split structures to structures/ for reference
-mv benchmark5.5/structures/* structures/
-
-# Create merged complexes from bound structures
-for pdb_id in $(ls structures/*_r_b.pdb | sed 's/.*\///' | sed 's/_r_b.pdb//'); do
-    cat "structures/${pdb_id}_r_b.pdb" "structures/${pdb_id}_l_b.pdb" | \
-        grep -E '^(ATOM|HETATM|TER)' > "merged/${pdb_id}.pdb"
-    echo "END" >> "merged/${pdb_id}.pdb"
-done
-```
-
-Alternatively, download the full complex PDB files directly from RCSB:
-```bash
-# For each PDB ID in the benchmark
-for pdb_id in $(cat benchmark5.5/pdb_list.txt); do
-    wget -q "https://files.rcsb.org/download/${pdb_id}.pdb" -O "merged/${pdb_id}.pdb"
-    sleep 0.2  # Be polite to RCSB
-done
-```
-
-### Verification Checkpoint
-
-```bash
-# Should have 257 PDB files (all BM5.5 targets active; 11 prior OOM targets resolved via FASTA dedup)
-ls merged/*.pdb | wc -l
-# Expected: 257
-
-# Each PDB should have ATOM records with multiple chains
-grep -c '^ATOM' merged/1AK4.pdb
-# Expected: several thousand lines
-
-# Check chain IDs present
-awk '/^ATOM/{print substr($0,22,1)}' merged/1AK4.pdb | sort -u
-# Expected: A, D (or similar multi-chain output)
-```
+Full Blue/Green diff in `COMPARISON.md`.
 
 ---
 
-## 3. Step 1: Clean PDB Structures
+## Dataset
 
-### Script: `clean_pdbs.sh`
+| Quantity | Value |
+|---|---|
+| BM5.5 targets | 257 |
+| Rigid-body / Medium / Difficult | 162 / 60 / 35 |
+| Total chains | 605 |
+| Total residues | 122,966 |
+| Non-standard zlab IDs | 4 (BAAD, BOYV, BP57, CP57; parent_pdb_id populated in DB) |
 
-**What it does:**
-1. For each PDB in `merged/`, extracts unique chain IDs
-2. Runs Rosetta's `clean_pdb.py` on each chain individually
-3. Merges cleaned chains into a single PDB with proper TER records
-4. Renumbers atom serials sequentially
+FASTAs are derived from crystal coordinates, not RCSB canonical sequences. Of 257 targets, 241 differ from RCSB. Crystal stripping removed homo-multimer duplicate chains in 36 PDBs. His-tags removed from 41 targets. DNA/RNA chains excluded.
 
-**Why this step exists:**
-- Rosetta's `clean_pdb.py` standardizes atom naming to Rosetta conventions
-- Removes HETATM records (water, ligands, ions)
-- Fixes non-standard residue naming
-- Required for Rosetta relaxation to work correctly
+## Repository layout
 
-### Run
-
-```bash
-bash scripts/clean_pdbs.sh merged/ cleaned/ $CLEAN_SCRIPT
+```
+Protein_Ideal/
+├── data/                 Per-target inputs (cleaned crystals, FASTAs, prediction outputs)
+├── cleaned/              257 cleaned crystal PDBs
+├── merged/               Pre-cleaning input PDBs
+├── scripts/
+│   ├── data_preparation/   Crystal cleanup, FASTA derivation, Boltz-1 input prep
+│   ├── run/                AlphaFold + Boltz batch runners
+│   ├── relaxation/         Standalone AMBER, Rosetta protocol runners
+│   ├── validation/         MolProbity, TM-score, energy extraction
+│   └── analysis/           Per-pipeline aggregation
+├── green_data_analysis/  Green-specific bar + scatter figures (per metric)
+├── PROJECT_STATUS.md     Current state at lock
+├── NOTEBOOK.md           Lab notebook chronology (2026-02-07 → 2026-04-27 lock)
+├── COMPARISON.md         Blue/Green protocol diff
+└── README.md             This file
 ```
 
-### Script Audit
+`green_data_analysis/` mirrors metric-specific bar and scatter figures (clashscore, MP score, Rama outliers, Rama favored, rotamer outliers, C-beta outliers, RMS bonds, RMS angles, energy) for the Green pipeline. Combined Blue + Green figures live in `Protein_Relax_Pipeline/red_analysis/figures/` with `_blue` and `_green` variants where pipeline matters.
 
-**Input:** `merged/*.pdb` (raw PDB files from RCSB/BM5.5)
-**Output:** `cleaned/{PDBID}.pdb` (one file per complex, all chains merged)
+## Quickstart (Green re-run from scratch)
 
-**Potential issues identified:**
-- Chain ID `" "` (space) is mapped to `"_"` for Rosetta compatibility: this is correct behavior
-- The script uses a temporary directory per PDB and cleans up after: safe
-- Atom serial renumbering starts at 1 per file: correct
-- Only ATOM and HETATM lines are kept: intentional (removes REMARK, HEADER, etc.)
-
-**Edge cases:**
-- PDBs with no ATOM records are skipped (logged as `[SKIP]`)
-- If Rosetta's `clean_pdb.py` fails on a chain, that chain will be missing from output (check logs)
-
-### Verification Checkpoint
+For end-users querying the locked DB, use the primary repo's release artifact directly. This section is for re-running Green on ACCRE.
 
 ```bash
-# Should have same count as merged/
-ls cleaned/*.pdb | wc -l
-# Expected: same as merged/
+git clone git@github.com:dreamlessx/Protein_Ideal.git
+cd Protein_Ideal
 
-# Each cleaned PDB should have TER between chains and END at the bottom
-tail -5 cleaned/1AK4.pdb
-# Expected: ATOM lines, then TER, then END
+# 1. Crystal cleanup + FASTA derivation
+bash scripts/data_preparation/clean_pdbs.sh merged/ cleaned/ /path/to/rosetta/tools/protein_tools/scripts/clean_pdb.py
+python scripts/data_preparation/download_fastas.py merged/
+python scripts/data_preparation/organize_fastas.py
+python scripts/data_preparation/prepare_boltz_fastas.py
 
-# Check that atom serials are sequential starting from 1
-head -1 cleaned/1AK4.pdb
-# Expected: ATOM      1 ...
+# 2. Predictions (SLURM batch)
+sbatch scripts/run/af_batch.slurm
+sbatch scripts/run/boltz_batch.slurm
 
-# Compare chain count (should be preserved)
-awk '/^ATOM/{print substr($0,22,1)}' cleaned/1AK4.pdb | sort -u
-# Expected: same chains as in merged/1AK4.pdb
+# 3. Standalone AMBER on AF + Boltz outputs
+sbatch scripts/relaxation/green_amber_l40s.slurm
+
+# 4. Rosetta relaxation (810 runs/target × 257 targets)
+sbatch scripts/relaxation/green_rosetta.slurm
+
+# 5. Validation
+sbatch scripts/validation/green_molprobity.slurm
+sbatch scripts/validation/green_tmscore.slurm
+
+# 6. Aggregation (canonical analysis lives in Protein_Relax_Pipeline/red_analysis/)
+python scripts/analysis/aggregate_per_pipeline.py
 ```
+
+For the canonical analysis pipeline (which consumes both Blue and Green output to produce the locked DB and figures), see `Protein_Relax_Pipeline/db/scripts/build_db.py` plus `build_db_supplements.py`.
+
+## Computational resources (matched to Blue)
+
+| Resource | Specification |
+|---|---|
+| AlphaFold 2.3.2 | NVIDIA RTX A6000, partition `csb_gpu_acc`, 80 GB RAM |
+| Boltz-1 v0.4.1 | NVIDIA L40S 48 GB, partition `p_meiler_acc` |
+| Rosetta 3.15 | CPU, partition `batch` (`p_csb_meiler`) |
+| AMBER (standalone) | GPU OpenMM, on AlphaFold partition |
+
+All SLURM array scripts include `#SBATCH --exclude=cn1340`.
+
+## Resolved issues at lock
+
+- 1ACB and 1ATN AMBER-crystal divergence resolved via `amber_relax_crystal_v5.py` (peptide-bond chain-split detection).
+- 20 Blue crystal pre-Rosetta MP rows backfilled in the DB from Green crystal MP (PDBs verified byte-identical, MolProbity deterministic).
+- Boltz OOM tier resolved via FASTA deduplication (135 targets had duplicate homo-multimer chains).
+- AMBER X/Z atom-selection ambiguity resolved upstream (credited to Blue's diagnostic work, see `NOTEBOOK.md` 2026-02-21 entry).
+
+Full chronology in `NOTEBOOK.md`. Snapshot 2026-04-27a is the steady state.
+
+## License
+
+MIT.
 
 ---
 
-## 4. Step 2: Download FASTA Sequences
-
-### Script: `download_fastas.py`
-
-**What it does:**
-1. Scans `merged/` for PDB files
-2. Extracts 4-character PDB IDs from filenames
-3. Downloads FASTA sequences from RCSB (with fallback to PDBe)
-4. Handles obsolete entries by looking up replacement PDB IDs
-5. Logs all results to `fasta_download_log.csv`
-
-**Why not extract sequences from the PDB files directly?**
-- RCSB FASTA includes all chains with proper headers
-- Headers contain chain IDs needed for Boltz format conversion
-- More reliable than parsing PDB ATOM records for sequence
-
-> **UPDATE**: This pipeline now uses **crystal-derived sequences** extracted from BM5.5
-> bound-structure PDB ATOM records instead of RCSB UniProt FASTAs. The RCSB download step
-> is retained for reference, but all prediction FASTAs (`sequence.fasta`, `boltz_input.fasta`)
-> have been replaced with crystal-derived versions. Original RCSB FASTAs are backed up as
-> `sequence.fasta.pre_blue_match`. See [PROJECT_STATUS.md](PROJECT_STATUS.md) for rationale.
-
-### Run
-
-```bash
-python3 scripts/download_fastas.py merged/ fasta/
-```
-
-### Script Audit
-
-**Input:** `merged/` directory with PDB files
-**Output:** `fasta/{PDBID}.fasta` + `fasta/fasta_download_log.csv`
-
-**Endpoint priority:**
-1. `https://www.rcsb.org/fasta/entry/{PDB}` (primary)
-2. `https://www.rcsb.org/pdb/download/downloadFastaFiles.do?...` (fallback)
-3. `https://www.ebi.ac.uk/pdbe/entry/pdb/{PDB}/fasta` (PDBe fallback)
-
-**Retry logic:** 2 retries per endpoint with exponential backoff (1.5^i seconds)
-**Rate limiting:** 0.15s delay between PDB IDs (polite to servers)
-**Obsolete handling:** If all endpoints fail, checks RCSB entry API for replacement ID
-
-**Known special cases from our run:**
-- `1A2K`, `3RVW`: obsolete PDB IDs; FASTAs downloaded from replacement entries (5BXQ, 5VPG)
-- 4 non-standard IDs: `BAAD`, `BOYV`, `BP57`, `CP57`: sequences extracted from ATOM records
-
-**DNA/RNA exclusion policy:** DNA/RNA chains are excluded from all prediction FASTAs.
-BM5.5 is a protein-protein docking benchmark; neither AlphaFold nor Boltz supports
-nucleic acid prediction. Targets with DNA in the crystal structure (3P57, 1H9D) have
-their FASTAs filtered to protein chains only.
-
-### Verification Checkpoint
-
-```bash
-# Check download count
-grep -c 'ok' fasta/fasta_download_log.csv
-# Expected: ~260-266
-
-# Check failures
-grep 'fail' fasta/fasta_download_log.csv
-# Expected: 0-3 failures
-
-# Verify FASTA format (should start with >)
-head -2 fasta/1AK4.fasta
-# Expected:
-# >1AK4_1|Chains A, B|...
-# MNGKII...
-
-# Check that multi-chain complexes have multiple > headers
-grep -c '^>' fasta/1AK4.fasta
-# Expected: 2+ (one per chain group)
-```
-
----
-
-## 5. Step 3: Organize FASTAs
-
-### Script: `organize_fastas.py`
-
-**What it does:**
-1. Takes flat directory of `{PDBID}.fasta` files
-2. Creates one subdirectory per PDB ID under `data/`
-3. Copies (or moves) the FASTA file into the subdirectory
-4. Optionally renames it (e.g., to `sequence.fasta`)
-
-### Run
-
-```bash
-python3 scripts/organize_fastas.py fasta/ data/ --rename sequence.fasta
-```
-
-### Script Audit
-
-**Input:** `fasta/*.fasta`
-**Output:** `data/{PDBID}/sequence.fasta`
-
-**Behavior:**
-- PDB ID extracted from filename stem (uppercased)
-- Creates directory if it doesn't exist
-- Skips existing files unless `--overwrite` is passed
-- Copies by default, `--move` flag deletes source after copy
-
-**No issues identified.** This is a straightforward file organizer.
-
-### Verification Checkpoint
-
-```bash
-# Should have one directory per successfully downloaded FASTA
-ls data/ | wc -l
-# Expected: ~260-266
-
-# Each directory should have sequence.fasta
-ls data/1AK4/sequence.fasta
-# Expected: exists
-
-# Verify content matches original
-diff fasta/1AK4.fasta data/1AK4/sequence.fasta
-# Expected: no differences
-```
-
----
-
-## 6. Step 4: Prepare Boltz-1 Input
-
-### Script: `prepare_boltz_fastas.py`
-
-**What it does:**
-1. Reads `data/*/sequence.fasta` files
-2. Parses chain IDs from RCSB FASTA headers
-3. Rewrites each sequence with Boltz-compatible headers: `>{CHAIN}|PROTEIN|`
-4. Outputs `boltz_input.fasta` in each subdirectory
-
-**Why this is needed:**
-Boltz-1 requires a specific FASTA format where each chain header contains:
-- The chain letter
-- The molecule type (`PROTEIN`)
-- Separated by pipes
-
-Standard RCSB headers look like: `>1AK4_1|Chains A, B|CYCLOPHILIN A|Homo sapiens`
-Boltz needs: `>A|PROTEIN|`
-
-### Run
-
-```bash
-python3 scripts/prepare_boltz_fastas.py data/
-```
-
-### Script Audit
-
-**Input:** `data/*/sequence.fasta`
-**Output:** `data/*/boltz_input.fasta`
-
-**Chain parsing logic:**
-1. Looks for `Chain[s] A, B, C` pattern in header (regex)
-2. Fallback: splits on `|`, takes first char of second field
-3. Last resort: defaults to chain `A`
-
-**Known behavior:**
-- If RCSB header says `Chains A, B` (homo-dimer with identical chains), the script writes both `>A|PROTEIN|` and `>B|PROTEIN|` with the same sequence: this is correct for Boltz multimer input
-- Single-chain entries get a single `>A|PROTEIN|` header
-
-**Potential issue:** If a header has an unusual format that doesn't match the regex, it falls back to `A`. This could produce incorrect chain assignments for some entries. Verify output manually for critical targets.
-
-### Verification Checkpoint
-
-```bash
-# Check that boltz_input.fasta was created
-ls data/1AK4/boltz_input.fasta
-# Expected: exists
-
-# Verify Boltz format
-head -4 data/1AK4/boltz_input.fasta
-# Expected:
-# >A|PROTEIN|
-# MNGKII...
-# >D|PROTEIN|
-# PIVQNL...
-
-# Verify chain count matches sequence.fasta
-grep -c '^>' data/1AK4/sequence.fasta
-grep -c '^>' data/1AK4/boltz_input.fasta
-# Expected: should match (or be equal/greater if chains are split)
-
-# Validate ALL Boltz FASTAs have correct format
-for f in data/*/boltz_input.fasta; do
-    if ! grep -q '|PROTEIN|' "$f"; then
-        echo "BAD: $f"
-    fi
-done
-# Expected: no output (all valid)
-```
-
----
-
-## 7. Step 5: Run AlphaFold 2.3.2
-
-### Scripts: `af_array.slurm` / `af_array_highmem.slurm`
-
-**What they do:**
-- Submit SLURM GPU jobs to run AlphaFold 2.3.2
-- Auto-detect monomer vs multimer based on sequence count
-- Produce 10 models per target: 5 AMBER-relaxed (`ranked_*.pdb`) + 5 unrelaxed (`unrelaxed_model_*.pdb`)
-- AMBER relaxation treated as 7th relaxation protocol (alongside 6 Rosetta protocols)
-- Skip completed targets (completion guard checks for `ranking_debug.json`)
-- Clean up intermediates (MSAs, pickles) to manage disk usage
-- **Status**: 257/257 COMPLETE
-
-### Run (Array Job)
-
-```bash
-# Standard (64GB RAM, covers most targets)
-sbatch --array=1-257%10 scripts/run/af_array.slurm
-
-# High-memory (128GB RAM, for large multimer complexes)
-sbatch --array=<TASK_IDS> scripts/run/af_array_highmem.slurm
-```
-
-### Script Audit: `af_array.slurm`
-
-**Resources:** 1 node, 6 tasks, 1 A6000 GPU, 64GB RAM, 48h
-**FASTA selection:** Prefers `sequence.fasta` over `boltz_input.fasta`
-**Preset detection:** Counts `>` lines; if >1 → multimer, else monomer
-**Output:** `af_out/sequence/ranked_{0-4}.pdb` (AMBER-relaxed) + `af_out/sequence/unrelaxed_model_*.pdb` (raw predictions)
-
-**Key flags:**
-- `--nouse_gpu_relax`: runs AMBER relaxation on CPU (avoids GPU memory issues)
-- `--models_to_relax=all`: AMBER-relaxes all 5 ranked models (not just best)
-- `--max_template_date=9999-12-31`: allows all templates (no date cutoff)
-- Monomer: uses `pdb70` database
-- Multimer: uses `pdb_seqres` + `uniprot`, `num_multimer_predictions_per_model=1`
-
-**Database preset:** Full databases (equivalent to `--db_preset=full_dbs`) with `reduced_dbs`
-fallback on HHblits failure. Primary uses HHblits for BFD/UniRef30 searches; fallback uses
-jackhmmer with small_bfd. The `run_af()` function wraps the prediction call and retries
-with `--db_preset=reduced_dbs --small_bfd_database_path=...` if full_dbs fails.
-
-**AMBER safety:** If AMBER relaxation crashes but unrelaxed models exist, the script
-preserves unrelaxed output instead of deleting everything during the reduced_dbs retry.
-
-**Database paths (ACCRE, `/csbtmp/alphafold-data.230/`):**
-- `uniref90/uniref90.fasta`
-- `mgnify/mgy_clusters_2022_05.fa`
-- `uniref30/UniRef30_2021_03`
-- `bfd/bfd_metaclust_clu_complete_id30_c90_final_seq.sorted_opt`
-- `pdb70/pdb70`
-- `pdb_mmcif/mmcif_files/`
-- `pdb_mmcif/obsolete.dat`
-
-**Known OOM targets at 64GB (require 128GB highmem script):**
-1AHW, 1ATN, 1DFJ, 1DQJ, 1E6J, 1FC2, 1IRA, 1JWH, 1MLC (all large multimer complexes)
-
-**AMBER relaxation failures: ALL RESOLVED:**
-7 targets (1ATN, 1DFJ, 1FC2, 1WEJ, 2BTF, 4CPA, 5JMO) originally failed AMBER relaxation
-due to non-standard residues (X/Z) in FASTA sequences. Root cause identified by Blue:
-AlphaFold can't place atoms for X (unknown AA) and Z (ambiguous Glu/Gln), causing AMBER's
-`_check_residues_are_well_defined()` to reject the model. Fix: trimmed X/Z from FASTA
-terminals. All 7 now have full 10 models (5 ranked + 5 unrelaxed).
-
-**HHblits failures (31 targets, resubmitted with reduced_dbs fallback):**
-If the main job was submitted before the fallback logic was added to the script, HHblits
-failures will not trigger the `reduced_dbs` retry. Clean failed `af_out/` directories and
-resubmit with the current script version.
-
-### Expected Output
-
-After cleanup, 10 models per target are retained:
-```
-data/{PDBID}/af_out/
-└── sequence/
-    ├── ranked_0.pdb              # Best AMBER-relaxed model (0-indexed)
-    ├── ranked_1.pdb
-    ├── ranked_2.pdb
-    ├── ranked_3.pdb
-    ├── ranked_4.pdb              # 5th AMBER-relaxed model
-    ├── unrelaxed_model_1_*.pdb   # Raw AF prediction (1-indexed, AF convention)
-    ├── unrelaxed_model_2_*.pdb
-    ├── unrelaxed_model_3_*.pdb
-    ├── unrelaxed_model_4_*.pdb
-    ├── unrelaxed_model_5_*.pdb
-    └── ranking_debug.json        # Maps ranked (0-indexed) to model (1-indexed)
-```
-
-**Numbering note**: AlphaFold uses 0-indexed `ranked_*.pdb` (ordered by confidence) and
-1-indexed `unrelaxed_model_*` (unordered). The `ranking_debug.json` file maps between them.
-For example, `ranked_0.pdb` may correspond to `unrelaxed_model_3` if model 3 scored highest.
-
-Intermediate files removed by cleanup: MSAs, feature pickles, result pickles,
-`relaxed_model_*.pdb` (duplicates of ranked PDBs), timings.
-
-### Verification Checkpoint
-
-```bash
-# Check how many targets have ranking_debug.json (completion marker)
-completed=0
-for d in data/*/af_out/*/; do
-    if [ -f "$d/ranking_debug.json" ]; then
-        completed=$((completed + 1))
-    fi
-done
-echo "AlphaFold complete: $completed"
-# Expected: 257/257 (all active benchmark targets)
-
-# Verify a specific prediction
-ls data/1AK4/af_out/sequence/ranked_*.pdb | wc -l
-# Expected: 5
-
-# Check model quality (ranking_debug.json shows pLDDT/pTM scores)
-cat data/1AK4/af_out/sequence/ranking_debug.json | python3 -m json.tool | head -10
-```
-
----
-
-## 8. Step 6: Run Boltz-1
-
-### Scripts: `boltz_array.slurm` / `boltz_single.slurm`
-
-**What they do:**
-- Run Boltz-1 v0.4.1 structure prediction
-- Use MSA server for fast multiple sequence alignment
-- Produce 5 diffusion samples per target
-- **Status**: 257/257 complete (re-run with crystal-derived FASTAs, job 9324391, zero failures)
-
-### Run (Array Job)
-
-```bash
-# Count targets
-N=$(ls -d data/*/ | wc -l)
-
-# Submit array job
-sbatch --array=1-${N} scripts/boltz_array.slurm
-```
-
-Or for a single target:
-```bash
-sbatch --chdir=data/1AK4 scripts/boltz_single.slurm boltz_input.fasta
-```
-
-### Script Audit: `boltz_array.slurm`
-
-**Resources:** 1 node, 1 CPU, 1 L40S GPU, 256GB RAM, 2 days
-**FASTA selection:** Prefers `boltz_input.fasta` over `sequence.fasta`
-**Header validation:** Checks that all headers match `>X|PROTEIN|` format
-
-**Key parameters:**
-- `diffusion_samples=5`: generates 5 models
-- `recycling_steps=10`: structure refinement iterations
-- `sampling_steps=200`: diffusion sampling steps
-- `output_format=pdb`: outputs PDB files (not mmCIF)
-- `use_msa_server`: uses ColabFold MSA server instead of local databases
-
-**Output format:** `--output_format pdb` (PDB files, not mmCIF)
-**Skip guard:** Checks for existing `boltz_model_*.pdb` files; skips if >= 5 found
-**Force re-run:** Set `FORCE=1` environment variable
-
-**Potential issues:**
-- 256GB RAM is very high; Boltz typically needs 16-64GB. This is set conservatively.
-- `--use_msa_server` requires internet access from compute nodes (may be blocked on some clusters)
-- The MSA server can be slow or rate-limited during peak usage
-
-### Expected Output
-
-```
-data/{PDBID}/boltz_out_dir/
-└── boltz_results_boltz_input/
-    ├── predictions/boltz_input/
-    │   ├── boltz_input_model_0.pdb
-    │   ├── boltz_input_model_1.pdb
-    │   ├── boltz_input_model_2.pdb
-    │   ├── boltz_input_model_3.pdb
-    │   └── boltz_input_model_4.pdb
-    ├── msa/                           # Generated MSAs
-    └── processed/                     # Processed features
-```
-
-### Verification Checkpoint
-
-```bash
-# Check how many targets have Boltz models
-completed=0
-for d in data/*/boltz_out_dir/; do
-    count=$(find "$d" -name 'boltz_input_model_*.pdb' -o -name 'boltz_model_*.pdb' 2>/dev/null | wc -l)
-    if [ "$count" -ge 1 ]; then
-        completed=$((completed + 1))
-    fi
-done
-echo "Boltz complete: $completed"
-# Expected: 257/257 (all benchmark targets, 5 models each)
-# 11 targets use deduplicated FASTAs (unique chains only) to avoid Boltz OOM:
-#   Root cause: boltz_input.fasta listed all physical chain copies (quadratic attention scaling)
-#   Fix: boltz_input_dedup.fasta with unique sequences only (matches AF sequence.fasta)
-#   Targets: 1DE4, 1GXD, 1K5D, 1N2C, 1WDW, 1ZM4, 3BIW, 3EO1, 3L89, 4GXU, 6EY6
-
-# Verify a specific prediction
-find data/1AK4/boltz_out_dir -name '*.pdb' | wc -l
-# Expected: 5
-```
-
----
-
-## 9. Step 7: Organize Predictions for Relaxation
-
-### Manual Step (no script: do this manually)
-
-Before running relaxation, predictions need to be organized into the `test/` directory structure:
-
-```bash
-for pdb_id in $(ls data/); do
-    # Skip if no predictions
-    af_count=$(ls data/$pdb_id/af_out/sequence/ranked_*.pdb 2>/dev/null | wc -l)
-    boltz_count=$(find data/$pdb_id/boltz_out_dir -name 'boltz_input_model_*.pdb' 2>/dev/null | wc -l)
-
-    if [ "$af_count" -lt 5 ] && [ "$boltz_count" -lt 5 ]; then
-        echo "SKIP: $pdb_id (AF=$af_count, Boltz=$boltz_count)"
-        continue
-    fi
-
-    mkdir -p test/$pdb_id/AF test/$pdb_id/Boltz
-
-    # Copy crystal structure
-    if [ -f cleaned/$pdb_id.pdb ]; then
-        cp cleaned/$pdb_id.pdb test/$pdb_id/$pdb_id.pdb
-    fi
-
-    # Copy AF predictions
-    cp data/$pdb_id/af_out/sequence/ranked_*.pdb test/$pdb_id/AF/ 2>/dev/null
-
-    # Copy Boltz predictions
-    find data/$pdb_id/boltz_out_dir -name 'boltz_input_model_*.pdb' \
-        -exec cp {} test/$pdb_id/Boltz/ \; 2>/dev/null
-done
-```
-
-### Verification Checkpoint
-
-```bash
-# Check structure
-ls test/1AK4/
-# Expected: 1AK4.pdb  AF/  Boltz/
-
-ls test/1AK4/AF/
-# Expected: ranked_0.pdb through ranked_4.pdb
-
-ls test/1AK4/Boltz/
-# Expected: boltz_input_model_0.pdb through boltz_input_model_4.pdb
-```
-
----
-
-## 10. Step 8: Run Relaxation (7 Input Types x 6 Rosetta Protocols)
-
-### Overview
-
-The relaxation benchmark applies 6 Rosetta protocols to 7 input types (source buckets), plus standalone
-AMBER relaxation as a separate test. This design enables systematic comparison of:
-- Different prediction sources (AF vs Boltz vs crystal)
-- Different relaxation methods (AMBER vs Rosetta)
-- Different Rosetta scoring functions (beta_nov16 vs REF2015)
-- Different Rosetta search spaces (Cartesian vs torsion vs dual-space)
-
-**Green pipeline verification**: This pipeline independently reproduces the Blue pipeline's
-protocol with matched parameters, providing cross-validation of the relaxation benchmark.
-
-### AMBER Relaxation (2 Variants)
-
-**1. AF built-in AMBER** (computed during AlphaFold prediction, Step 5):
-- **Force field**: AMBER ff14SB
-- **Energy tolerance**: 2.39 kcal/mol
-- **Position restraint stiffness**: 10.0 kcal/mol/A^2
-- **Compute**: CPU (`--nouse_gpu_relax`)
-- **Output**: `ranked_*.pdb` files (already generated in Step 5)
-- No separate script needed: built into AlphaFold's `--models_to_relax=all`
-
-**2. Standalone AMBER** (GPU, separate from AF):
-- **Script**: `green_amber_l40s.slurm`
-- **Inputs**: AF unrelaxed (5 models) + Boltz (5 models) + crystal (1 model) per target
-- **Parameters**: `max_iterations=0`, `tolerance=2.39`, `stiffness=10.0`, `max_outer_iterations=3`
-- **Compute**: GPU-accelerated OpenMM on L40S
-- **Purpose**: Test whether standalone AMBER produces equivalent results to AF's built-in AMBER
-
-### 7 Rosetta Input Types
-
-| # | Input Type | Source | Models | Description |
-|---|-----------|--------|--------|-------------|
-| 1 | `af_relaxed` | `ranked_*.pdb` | 5 | AF2 built-in AMBER-relaxed models |
-| 2 | `af_unrelaxed` | `unrelaxed_model_*.pdb` | 5 | AF2 raw predictions (no AMBER) |
-| 3 | `boltz` | `boltz_input_model_*.pdb` | 5 | Boltz-1 diffusion models |
-| 4 | `amber_af` | Standalone AMBER output | 5 | Standalone AMBER of AF unrelaxed |
-| 5 | `amber_boltz` | Standalone AMBER output | 5 | Standalone AMBER of Boltz |
-| 6 | `crystal` | `cleaned/*.pdb` | 1 | Experimental crystal structure (baseline) |
-| 7 | `amber_crystal` | Standalone AMBER on crystal | 1 model per target | Standalone AMBER relaxation of crystal |
-
-**Total**: 27 models per target
-
-### Rosetta Relaxation
-
-### Script: `green_rosetta.slurm` (job 9372018)
-
-**What it does:**
-1. For each target, relaxes all 27 input models (7 source buckets):
-   - 6 Rosetta protocols x 5 replicates = 30 relaxed structures per model
-   - Total: 810 Rosetta runs per target, 208,170 per pipeline; 416,340 combined
-2. Each replicate uses `-nstruct 1` with a different suffix (`_r1` through `_r5`)
-
-### The 6 Rosetta Protocols
-
-| Key | Protocol | Scoring Function | Rosetta Flags |
-|-----|----------|-----------------|---------------|
-| `cart_beta` | Cartesian | beta_nov16 | `-relax:cartesian -beta_nov16 -score:weights beta_nov16_cart` |
-| `cart_ref15` | Cartesian | ref2015 | `-relax:cartesian -score:weights ref2015_cart` |
-| `dual_beta` | Dualspace | beta_nov16 | `-relax:dualspace -beta_nov16 -score:weights beta_nov16_cart -nonideal -relax:minimize_bond_angles -relax:minimize_bond_lengths` |
-| `dual_ref15` | Dualspace | ref2015 | `-relax:dualspace -score:weights ref2015_cart -nonideal -relax:minimize_bond_angles -relax:minimize_bond_lengths` |
-| `norm_beta` | Normal FastRelax | beta_nov16 | `-beta_nov16 -score:weights beta_nov16` |
-| `norm_ref15` | Normal FastRelax | ref2015 | `-score:weights ref2015` |
-
-### Run
-
-```bash
-# Submit standalone AMBER first (GPU, 10 concurrent)
-sbatch --array=1-257%10 scripts/green_amber_l40s.slurm
-
-# Submit Rosetta after AMBER completes (CPU, 50 concurrent, depends on AMBER + AF)
-sbatch --dependency=afterok:<AMBER_JOBID>:<AF_JOBID> --array=1-257%50 scripts/green_rosetta.slurm
-```
-
-The Rosetta script iterates over all 7 source buckets for each target:
-
-```bash
-# For each target (1 SLURM array task per target):
-#   For each source bucket (af_relaxed, af_unrelaxed, amber_af, amber_boltz, amber_crystal, boltz, crystal):
-#     For each model (5 per type, 1 for crystal/amber_crystal):
-#       For each protocol (6 Rosetta protocols):
-#         For each replicate (5 replicates):
-#           Run Rosetta relax: data/{ID}/rosetta/{input_type}/{model}/{protocol}/
-```
-
-### Script Audit
-
-**Resources (green_rosetta.slurm):** 1 node, 1 CPU, 4GB RAM, 72h, batch partition
-**No GPU required**: Rosetta relax is CPU-only
-
-**Resources (green_amber_l40s.slurm):** 1 node, 1 GPU (L40S), 6h, p_meiler_acc account
-
-**Common Rosetta flags (matching Blue's protocol):**
-- `-ignore_zero_occupancy false`: processes all atoms regardless of occupancy
-- `-nstruct 1`: one structure per run (replicates via suffix)
-- `-no_nstruct_label`: don't add `_0001` to output filename
-- `-out:pdb_gz`: gzip output (saves disk space)
-- `-flip_HNQ`: optimize His/Asn/Gln hydrogen placement
-- `-fa_max_dis 9.0`: maximum interaction distance for scoring
-- `-optimization:default_max_cycles 200`: convergence iterations
-- `-out:levels all:warning`: suppress verbose logging
-- `-out::suffix "_r${r}"`: replicate suffix
-- `-scorefile relax.fasc`: score output file
-
-**Potential issues:**
-- 72h timeout: a single target with 27 models x 6 protocols x 5 replicates = 810 runs. Each relax takes 5-60 minutes depending on size. Very large complexes may timeout.
-- 4GB RAM is tight for large complexes. May need 8-16GB for >600 residues.
-
-### Expected Output
-
-```
-data/{PDBID}/rosetta/
-├── af_relaxed/
-│   ├── ranked_0/
-│   │   ├── cartesian_beta/ranked_0_r1.pdb.gz ... _r5.pdb.gz
-│   │   ├── cartesian_ref15/
-│   │   ├── dualspace_beta/
-│   │   ├── dualspace_ref15/
-│   │   ├── normal_beta/
-│   │   └── normal_ref15/
-│   └── ... (ranked_1 through ranked_4)
-├── af_unrelaxed/
-│   └── ... (unrelaxed_model_1 through unrelaxed_model_5)
-├── boltz/
-│   └── ... (boltz_input_model_0 through boltz_input_model_4)
-├── amber_af/
-│   └── ... (amber-relaxed AF unrelaxed models)
-├── amber_boltz/
-│   └── ... (amber-relaxed Boltz models)
-└── crystal/
-    ├── cartesian_beta/{PDBID}_r1.pdb.gz ... _r5.pdb.gz
-    ├── cartesian_ref15/
-    ├── dualspace_beta/
-    ├── dualspace_ref15/
-    ├── normal_beta/
-    └── normal_ref15/
-```
-
-Each protocol directory contains:
-- 5 replicate PDB files (`*_r1.pdb.gz` through `*_r5.pdb.gz`)
-- `relax.fasc` (Rosetta score file)
-- `log/` directory with per-replicate logs
-
-### Verification Checkpoint
-
-```bash
-# Count relaxed structures for a single target (all 7 source buckets)
-find data/1AK4/rosetta/ -name '*.pdb.gz' | wc -l
-# Expected: 810 (27 models x 6 protocols x 5 replicates)
-
-# Count by source bucket
-for t in af_relaxed af_unrelaxed boltz amber_af amber_boltz crystal amber_crystal; do
-    echo "$t: $(find data/1AK4/rosetta/$t/ -name '*.pdb.gz' 2>/dev/null | wc -l)"
-done
-# Expected: 150 each for 5-model buckets, 30 each for crystal and amber_crystal (1 x 6 x 5)
-
-# Verify a relaxation log looks normal (check for "Total weighted score")
-tail -5 data/1AK4/rosetta/crystal/cartesian_beta/log/*_cart_beta_r1.log
-# Expected: should end with score information, no errors
-
-# Check that .fasc files contain scores
-head -3 data/1AK4/rosetta/crystal/cartesian_beta/relax.fasc
-# Expected: SCORE: header line followed by data
-```
-
----
-
-## 11. Step 9: MolProbity Validation
-
-### Script: `run_molprobity.sh`
-
-**What it does:**
-1. For each PDB in the test set:
-   - Validates the experimental crystal structure
-   - Validates 5 raw AlphaFold predictions
-   - Validates 5 raw Boltz predictions
-   - Validates all relaxed structures (30 crystal + 300 prediction relaxations)
-2. Outputs per-protein CSV files with 16+ metrics per structure
-3. Supports resume (skips already-validated structures)
-
-### Run
-
-```bash
-bash scripts/run_molprobity.sh test/ molprobity_results/
-```
-
-### Script Audit
-
-**Dependencies:** `reduce` (hydrogen addition) + `phenix.molprobity` (validation)
-
-**Process per structure:**
-1. Decompress `.pdb.gz` if needed
-2. Add hydrogens with `reduce -FLIP -Quiet` (try without `-FLIP` if that fails)
-3. Run `phenix.molprobity input_H.pdb keep_hydrogens=True` with 600s timeout
-4. Parse `molprobity.out` for metrics
-5. Write to per-protein CSV
-
-**Metrics collected:**
-
-| Metric | Description | Good Values |
-|--------|-------------|-------------|
-| Clashscore | All-atom steric clashes per 1000 atoms | < 10 |
-| Ramachandran Favored | % residues in favored regions | > 95% |
-| Ramachandran Outliers | % residues in outlier regions | < 0.5% |
-| Rotamer Outliers | % side-chain rotamer outliers | < 2% |
-| C-beta Deviations | Backbone geometry deviations | < 5 |
-| Bond RMSZ | Bond length deviation from ideal | < 1.5 |
-| Angle RMSZ | Bond angle deviation from ideal | < 1.5 |
-| MolProbity Score | Combined quality metric | < 2.0 |
-
-**Potential issues:**
-- `reduce` may fail on structures with non-standard residues (falls back to no hydrogens)
-- 600s timeout may be insufficient for very large complexes
-- Parsing relies on specific `molprobity.out` format: may break with different Phenix versions
-
-**Structures validated per PDB:** 341 total
-- 1 crystal structure
-- 10 raw predictions (5 AF + 5 Boltz)
-- 30 crystal relaxations (6 protocols x 5 reps)
-- 300 prediction relaxations (10 models x 6 protocols x 5 reps)
-
-### Verification Checkpoint
-
-```bash
-# Check that CSV files were created
-ls molprobity_results/csvs/ | wc -l
-# Expected: 20 (one per PDB in test subset)
-
-# Check line count (should be 342 = 1 header + 341 structures)
-wc -l molprobity_results/csvs/1AK4_validation.csv
-# Expected: 342
-
-# Check for failures
-grep -c 'FAILED' molprobity_results/csvs/1AK4_validation.csv
-# Expected: 0
-
-# Merge all CSVs for analysis
-head -1 molprobity_results/csvs/$(ls molprobity_results/csvs/ | head -1) > molprobity_results/all_validation.csv
-tail -n +2 -q molprobity_results/csvs/*_validation.csv >> molprobity_results/all_validation.csv
-wc -l molprobity_results/all_validation.csv
-# Expected: ~6821 (1 header + 341 x 20 PDBs)
-```
-
----
-
-## 12. Step 10: Collect Metrics
-
-### Script: `collect_metrics.py` (PyMOL Plugin)
-
-**What it does:**
-1. Loads multiple structures into PyMOL
-2. Aligns each to a reference structure (crystal)
-3. Calculates C-alpha RMSD
-4. Extracts Rosetta total_score from PDB REMARK lines or scorefile
-5. Outputs TSV with RMSD and energy per structure
-
-### Run (Inside PyMOL)
-
-```python
-# Load structures
-load test/1AK4/1AK4.pdb, crystal
-load test/1AK4/AF/ranked_0.pdb, af_ranked0
-# ... load more structures
-
-# Run the plugin
-run scripts/collect_metrics.py
-collect_metrics ref=crystal, sel=polymer and name CA, do_fit=1, out=metrics.tsv
-```
-
-For relaxed structures with a Rosetta scorefile:
-```python
-collect_metrics ref=crystal, scorefile=test/1AK4/cartesian_beta/relax.fasc, out=metrics.tsv
-```
-
-### Script Audit
-
-**RMSD calculation:**
-- Uses PyMOL's `cmd.align()` with `cycles=0` (no outlier rejection): gives true RMSD
-- Selection: `polymer and name CA`: C-alpha atoms only
-- `transform=1`: performs optimal superposition before measuring
-
-**Energy extraction priority:**
-1. Check external scorefile (`.fasc` or `.sc`) if provided
-2. Parse REMARK lines in PDB for `total_score`
-3. Return `None` if neither found
-
-**Output:** TSV file with columns: `object`, `rmsd_to_{ref}`, `pairs`, `energy_total_score`
-
-**No issues identified.** This script is straightforward and correct.
-
-### Verification Checkpoint
-
-```bash
-# Check output file
-head -5 metrics.tsv
-# Expected: tab-separated with RMSD values
-
-# RMSD values should be:
-# - Crystal to crystal: NaN (self)
-# - Crystal relaxed: 0.5-2.0 A
-# - AF predictions: 1.0-5.0 A (depends on quality)
-# - AF relaxed: 1.5-6.0 A
-```
-
----
-
-## 13. Pipeline Audit
-
-### Summary of Script Verification
-
-| Step | Script | Status | Issues |
-|------|--------|--------|--------|
-| 0 | Download BM5.5 | Manual | URL may change; verify on Weng Lab site |
-| 1 | `clean_pdbs.sh` | **PASS** | Space chain ID mapping works correctly |
-| 2 | `download_fastas.py` | **PASS** | 2-3 PDB IDs may fail (obsolete/invalid) |
-| 3 | `organize_fastas.py` | **PASS** | No issues |
-| 4 | `prepare_boltz_fastas.py` | **PASS with caveat** | Unusual FASTA headers may default to chain A |
-| 5 | `af_array.slurm` | **PASS** | 64GB RAM; 128GB highmem variant for large complexes; 7 AMBER failures resolved via FASTA fix |
-| 5 | `af_array_highmem.slurm` | **PASS** | 128GB RAM for large multimer complexes |
-| 6 | `boltz_array.slurm` | **PASS** | MSA server needs internet from compute node; 257/257 COMPLETE |
-| 6 | `boltz_array_highmem.slurm` | **PASS** | H100 80GB tier for large targets |
-| 7 | Organize predictions | Manual | No script; documented above |
-| 8a | `green_amber_l40s.slurm` | **PASS** | Standalone AMBER relaxation (AF unrelaxed + Boltz + crystal, GPU L40S, 6h, p_meiler_acc) |
-| 8b | `green_rosetta.slurm` | **PASS** | All 7 source buckets x 6 protocols x 5 reps; 72h wall time |
-| 9 | `run_molprobity.sh` | Archived | Canonical analysis lives in companion repo `dreamlessx/Protein_Relax_Pipeline/red_analysis/` |
-| 10 | `collect_metrics.py` | **PASS** | No issues |
-
-### Overall Pipeline Viability: PLAUSIBLE
-
-The pipeline is scientifically sound and technically correct. The main risks are:
-1. **Resource limits**: some SLURM scripts use tight memory/time limits that may fail on large complexes
-2. **External dependencies**: MSA server availability, RCSB API stability
-3. **Manual steps**: Step 7 (organizing predictions) has no script and is error-prone
-
-### Recommendations
-
-1. Increase array job memory to 16GB for relaxation, 64GB for AlphaFold array
-2. Create a script for Step 7 (organizing predictions) to eliminate manual errors
-3. Add a master pipeline script that chains all steps with dependency checking
-4. Add `.gitignore` for large intermediate files (MSAs, pickles)
-
----
-
-## 14. Troubleshooting
-
-### AlphaFold Fails with OOM
-
-```
-ResourceExhaustedError: OOM when allocating tensor
-```
-**Fix:** Increase `--mem` in SLURM script. Large complexes (>600 residues) may need 64-128GB.
-
-### Boltz MSA Server Timeout
-
-```
-ConnectionError: MSA server not responding
-```
-**Fix:** Check internet access from compute nodes. If blocked, pre-compute MSAs using local databases:
-```bash
-boltz predict input.fasta --msa_dir ./precomputed_msas/ --output_format pdb
-```
-
-### Rosetta Relax Crashes
-
-```
-ERROR: Unable to open file
-```
-**Fix:** Check that the Rosetta database path (`-database`) is correct and accessible from compute nodes.
-
-### MolProbity Parsing Returns NA
-
-```
-NA,NA,NA,NA...
-```
-**Fix:** Check Phenix version compatibility. The parsing regex expects specific output format from `phenix.molprobity`. Run manually and compare output format:
-```bash
-phenix.molprobity input.pdb keep_hydrogens=True
-cat molprobity.out
-```
-
-### HHblits Failures Despite Fallback in Script
-
-```
-RuntimeError: HHblits failed on the input
-```
-**Cause:** SLURM copies the submission script at job submission time. If the `reduced_dbs`
-fallback was added to `af_array.slurm` AFTER the job was submitted, running tasks use the
-old version without fallback.
-
-**Fix:**
-1. Identify failed targets: `for d in data/*/af_out; do [ -d "$d" ] && [ ! -f "$d"/*/ranking_debug.json ] && ls "$d"/*/unrelaxed_model_*.pdb 2>/dev/null | wc -l | grep -q '^0$' && echo "$(basename $(dirname $d))"; done`
-2. Clean failed output: `rm -rf data/{TARGET}/af_out`
-3. Resubmit with current script: `sbatch --array=<IDS> af_array.slurm`
-
-### Disk Space Emergency
-
-```
-Disk quota exceeded
-```
-**Fix:** AF intermediates consume ~1 GB per target (MSAs, pickles). Clean manually:
-```bash
-for d in data/*/af_out/*/; do
-    rm -rf "$d/msas" "$d/features.pkl" "$d/result_model_"*.pkl "$d/timings.json" 2>/dev/null
-    # Remove relaxed_model_*.pdb (duplicates of ranked_*.pdb)
-    rm -f "$d/relaxed_model_"*.pdb 2>/dev/null
-done
-```
-Monitor with `du -sh /data/p_csb_meiler/agarwm5/protein_ideal_test/benchmarking/`.
-
-### FASTA Download Failures
-
-```
-[FAIL] 3RVW: no FASTA found
-```
-**Fix:** Some PDB IDs are obsolete. Check https://www.rcsb.org/structure/{PDBID} for replacement entries. Update your PDB list accordingly.
-
-### Bad ACCRE Node cn1340
-
-ACCRE node `cn1340` produces instant SLURM job failures (0:01-0:02 runtime, exit code 0:53).
-Traced 1,614+ failures to this node alone. All production SLURM scripts in this repo include
-`#SBATCH --exclude=cn1340` to skip it. Other nodes (cn1626, cn1594, cn1700) work fine.
-If you are forking this pipeline elsewhere, retain the `--exclude=cn1340` directive on ACCRE
-or remove it for clusters that lack the bad node.
-
----
-
-Last updated: 2026-04-27. Pipeline at 100.000% lock.
+*Snapshot 2026-04-27a, locked at 100.000% on 2026-04-27. Companion to `Protein_Relax_Pipeline`. Last verified 2026-04-28.*

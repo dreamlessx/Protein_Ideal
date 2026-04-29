@@ -684,16 +684,16 @@ comparison. Excluded for consistency.
 | 1GXD | ~2,400 | 1 (of 5) | OOM at 5 samples; 1 sample succeeded but inconsistent |
 | 3EO1 | ~2,600 | 1 (of 5) | OOM at 5 samples; 1 sample succeeded but inconsistent |
 
-### Revised Benchmark: 246 Targets
+### Benchmark Restored to Full 257 (FASTA Dedup)
+
+The 246-target restriction above describes the historical state when 11 targets failed Boltz with raw multi-chain FASTAs. We later traced the OOMs to quadratic attention scaling on duplicated chain copies in homo-multimers. Deduplicating `boltz_input.fasta` to unique sequences resolved every OOM on standard L40S 48GB. The benchmark is now 257/257 active, no exclusions.
 
 | Category | Count |
 |----------|-------|
 | Total BM5.5 targets | 257 |
-| Excluded (full OOM, >3000 res) | 9 |
-| Excluded (partial OOM, 1/5 models) | 2 |
-| **Active benchmark** | **246** |
-| AF predictions | 246/246, 5 models each (1,230 PDBs) |
-| Boltz predictions | 246/246, 5 models each (1,230 PDBs) |
+| Active benchmark | **257** |
+| AF predictions | 257/257, 5 models each |
+| Boltz predictions | 257/257, 5 models each (post-dedup) |
 
 ---
 
@@ -701,14 +701,6 @@ comparison. Excluded for consistency.
 
 Deleted 31 GB of AF stderr logs (`benchmarking/logs/*.err`), TensorFlow warning spam
 from completed jobs. Disk: 41 GB → 9.8 GB. Provides headroom for Rosetta outputs.
-
----
-
-## Pending Steps
-- **Step 7**: Submit Rosetta relaxation (6 protocols x 5 replicates on AF + Boltz + crystal)
-- **Step 8**: MolProbity + PoseBusters validation
-- **Step 9**: Collect RMSD + energy metrics
-- **Step 10**: Figures and analysis (Teal)
 
 ---
 
@@ -720,3 +712,9 @@ resolved via v5 chain-split preprocessing. cn1340 ACCRE node excluded from all
 SLURM jobs after 1,614+ failures traced to it. Combined Blue+Green frame in
 companion repo dreamlessx/Protein_Relax_Pipeline: 416,340/416,340 Rosetta
 MolProbity rows. Snapshot 2026-04-27a, qc_status=pass.
+
+---
+
+## 2026-04-28: DB Supplements Complete
+
+`rosetta_energy` brought to 100% coverage (416,340 / 416,340) via patched extractor (sidecar + PDB POSE_ENERGIES_TABLE fallback, plus the missing `amber_crystal` classification branch). `prerosetta_metrics` at 13,364 (Stage C Blue crystal backfill of 20 rows). `tm_scores` at 104,765 (12,065 pre + 92,700 post). `qc_quarantine` clean (0 rows). 4 non-standard targets BAAD/BOYV/BP57/CP57 carry `parent_pdb_id` (3AAD_A:B / 1OYV_B:I / 3P57_AB:P / 3P57_CD:P). See `Protein_Relax_Pipeline/PROJECT_STATUS.md` for details.
