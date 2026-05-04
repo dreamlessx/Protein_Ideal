@@ -6,7 +6,7 @@
 Final state under the locked snapshot:
 - **rosetta_metrics**: 416,340 (locked)
 - **prerosetta_metrics**: 13,364 (13,344 + 20 Stage C Blue crystal backfill)
-- **tm_scores**: 104,765 (12,065 pre + 92,700 post)
+- **tm_scores**: 105,550 (12,850 pre + 92,700 post; post green af_unrelaxed backfill of 157 missing targets)
 - **rosetta_energy**: **416,340 (100% coverage)** of rosetta_metrics; recovered the previously-missed 232,967 cells via patched extractor (sidecar + PDB POSE_ENERGIES_TABLE fallback, plus the missing `amber_crystal` classification branch)
 - **targets**: 257 with full metadata + `parent_pdb_id` for the 4 non-standard
 - **qc_quarantine**: 0 (clean)

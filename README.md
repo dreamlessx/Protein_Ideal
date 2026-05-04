@@ -22,7 +22,7 @@ Two independent pipelines run from the same FASTAs through the same prediction m
 
 The Green run statistically reproduces Blue. All three paper findings (AMBER fixes local geometry, crystal worst MolProbity, dualspace_beta wins integrated MP) replicate independently.
 
-## Three findings (full numbers in `Protein_Relax_Pipeline/red_analysis/PAPER_FINDINGS.md`)
+## Five findings (full numbers in `Protein_Relax_Pipeline/red_analysis/PAPER_FINDINGS.md`)
 
 1. **AMBER fixes local geometry without touching global fold.** Clashscore Cliff's d = -0.99 at TM Cliff's d = -0.01. AMBER improves MolProbity for 257/257 AlphaFold and 256/257 Boltz targets.
 2. **Crystal structures carry the worst pre-Rosetta MolProbity.** Crystal clashscore 13.85 vs AlphaFold-relaxed 2.82 vs AMBER(Boltz) 1.60. Idealization artifact, not failure.
@@ -34,7 +34,7 @@ The Green run statistically reproduces Blue. All three paper findings (AMBER fix
 |---|---|
 | `rosetta_metrics` | 416,340 |
 | `prerosetta_metrics` | 13,364 |
-| `tm_scores` | 104,765 (12,065 pre + 92,700 post) |
+| `tm_scores` | 105,550 (12,850 pre + 92,700 post) |
 | `rosetta_energy` | 416,340 (100% coverage) |
 | `targets` | 257 with full metadata + parent_pdb_id for 4 non-standard |
 | `qc_quarantine` | 0 |
